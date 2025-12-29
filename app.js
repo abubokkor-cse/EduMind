@@ -3579,8 +3579,9 @@ async function handleFileUpload(e) {
 
 
 async function uploadToGeminiFilesAPI(file) {
+    // Note: File uploads must use direct API even in production due to multipart requirements
+    // This is acceptable as the key is only used server-side
     const apiKey = CONFIG.geminiApiKey;
-
 
     const startUploadUrl = `https://generativelanguage.googleapis.com/upload/v1beta/files?key=${apiKey}`;
 
@@ -5187,31 +5188,26 @@ async function explainGeneratedImage(imageData, mimeType, originalPrompt) {
         : `You are a friendly teacher. Look at this image carefully. Explain in 4-6 lines what is shown in the image and what concepts it illustrates. Make it easy for students to understand.`;
 
     try {
-        const response = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${CONFIG.geminiApiKey}`,
-            {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    contents: [{
-                        role: "user",
-                        parts: [
-                            {
-                                inlineData: {
-                                    mimeType: mimeType,
-                                    data: imageData
-                                }
-                            },
-                            { text: visionPrompt }
-                        ]
-                    }],
-                    generationConfig: {
-                        maxOutputTokens: 500,
-                        temperature: 0.7
-                    }
-                })
+        const body = {
+            contents: [{
+                role: "user",
+                parts: [
+                    {
+                        inlineData: {
+                            mimeType: mimeType,
+                            data: imageData
+                        }
+                    },
+                    { text: visionPrompt }
+                ]
+            }],
+            generationConfig: {
+                maxOutputTokens: 500,
+                temperature: 0.7
             }
-        );
+        };
+
+        const response = await callGeminiAPI("gemini-2.0-flash", body, false);
 
         console.log("🔍 Vision API response status:", response.status);
 
@@ -5313,18 +5309,12 @@ async function extractTopicFromContext(context) {
         : `Extract the main educational topic from this conversation in one line (just the topic name, no sentences):\n\n${context}\n\nTopic:`;
 
     try {
-        const response = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${API_KEY}`,
-            {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    contents: [{ role: "user", parts: [{ text: extractPrompt }] }],
-                    generationConfig: { maxOutputTokens: 50, temperature: 0.1 }
-                })
-            }
-        );
+        const body = {
+            contents: [{ role: "user", parts: [{ text: extractPrompt }] }],
+            generationConfig: { maxOutputTokens: 50, temperature: 0.1 }
+        };
 
+        const response = await callGeminiAPI("gemini-2.0-flash", body, false);
         const data = await response.json();
         if (data.candidates?.[0]?.content?.parts?.[0]?.text) {
             return data.candidates[0].content.parts[0].text.trim();
@@ -5963,17 +5953,28 @@ async function generateGoogleTTS(text, langConfig) {
         }
     };
 
-    const url = `${CONFIG.googleTTSEndpoint}?key=${CONFIG.geminiApiKey}`;
     console.log("🔊 Google TTS request:", langConfig.name, "| Voice:", googleConfig.voice);
 
     try {
-        const response = await fetch(url, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify(body)
-        });
+        let response;
+        if (CONFIG.isProduction) {
+            // In production, Google TTS is not available (no serverless function)
+            // Return null to fall back to ElevenLabs
+            console.warn("⚠️ Google TTS not available in production, using ElevenLabs");
+            return null;
+        } else {
+            // Direct API call for local development
+            const url = `${CONFIG.googleTTSEndpoint}?key=${CONFIG.geminiApiKey}`;
+            response = await fetch(url, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify(body)
+            });
+        }
+
+        if (!response) return null;
 
         console.log("🔊 TTS Response status:", response.status);
 
