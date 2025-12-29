@@ -5128,13 +5128,7 @@ async function generateEducationalImage(prompt) {
             parts: [{ text: imagePrompt }]
         }],
         generationConfig: {
-            responseModalities: ["TEXT", "IMAGE"],
-            // Use 1K/2K resolution for cost efficiency ($0.134/image vs $0.24 for 4K)
-            imageGenerationConfig: {
-                outputImageFormat: "png",
-                outputImageWidth: 1024,
-                outputImageHeight: 1024
-            }
+            responseModalities: ["IMAGE"]
         }
     };
 
