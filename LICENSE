@@ -1,0 +1,79 @@
+Copyright © 2025 MD. Abu Bokkor & Maharun Nasha Queen
+All Rights Reserved.
+
+==============================================
+EduMind - AI Virtual Teacher
+PROPRIETARY SOFTWARE LICENSE
+==============================================
+
+This software and associated documentation files (the "Software") are the 
+exclusive property of MD. Abu Bokkor and Maharun Nasha Queen.
+
+ALL RIGHTS RESERVED. No part of this Software may be reproduced, distributed,
+or transmitted in any form or by any means, including photocopying, recording,
+or other electronic or mechanical methods, without the prior written permission
+of the copyright holders.
+
+For licensing inquiries, contact:
+Email: abubokkor.cse@gmail.com
+Phone: +8801774757994
+
+==============================================
+OPEN-SOURCE COMPONENTS USED
+==============================================
+
+EduMind is built using the following open-source libraries and tools:
+
+1. Three.js (MIT License) - 3D rendering engine
+   https://github.com/mrdoob/three.js
+
+2. TalkingHead.js (MIT License) - 3D avatar with lip-sync
+   https://github.com/met4citizen/TalkingHead
+
+3. Firebase SDK (Apache 2.0 License) - Backend services
+   https://firebase.google.com
+
+4. Marked.js (MIT License) - Markdown parser
+   https://github.com/markedjs/marked
+
+5. DOMPurify (Apache 2.0 / Mozilla License) - XSS sanitizer
+   https://github.com/cure53/DOMPurify
+
+6. Ready Player Me - 3D avatar models
+   https://readyplayer.me
+
+All third-party open-source components remain under their respective licenses.
+See individual component licenses for details.
+
+==============================================
+THIRD-PARTY API SERVICES
+==============================================
+
+EduMind integrates with the following third-party services:
+- Google Gemini AI (Google Terms of Service)
+- ElevenLabs TTS (ElevenLabs Terms)
+- Stripe Payment (Stripe Terms)
+- Firebase/Google Cloud (Google Cloud Terms)
+
+Users must comply with all third-party service terms when using EduMind.
+
+==============================================
+DISCLAIMER
+==============================================
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
+
+---
+
+Project: EduMind - AI Virtual Teacher
+Created: December 2025
+Submission: National AI Build-a-thon 2026 (MillionX Bangladesh)
+Team: MD. Abu Bokkor (Lead Developer), Maharun Nasha Queen (Designer)
+Institution: Varendra University, Rajshahi, Bangladesh
