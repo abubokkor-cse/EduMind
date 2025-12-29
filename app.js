@@ -88,8 +88,14 @@ import {
 
 // ===========================================
 
+// Production detection - use serverless API endpoints on Vercel
+const IS_PRODUCTION = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+console.log("🌐 Environment:", IS_PRODUCTION ? "PRODUCTION (using serverless APIs)" : "LOCAL (using direct APIs)");
 
 const CONFIG = {
+    // Production mode flag
+    isProduction: IS_PRODUCTION,
+
     // API Endpoints
     geminiEndpoint: "https://generativelanguage.googleapis.com/v1beta/models/",
     geminiLiveEndpoint: "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent",
@@ -440,7 +446,35 @@ function detectLanguageFromText(text) {
     return getStudentLanguage() || 'en';
 }
 
+// ===========================================
+// Helper function for Gemini API calls (handles local vs production)
+// ===========================================
+async function callGeminiAPI(model, body, stream = false) {
+    let url, headers;
 
+    if (IS_PRODUCTION) {
+        // Production: Use serverless API
+        url = stream ? CONFIG.apiEndpoints.geminiStream : CONFIG.apiEndpoints.gemini;
+        headers = { "Content-Type": "application/json" };
+        body.model = model; // Include model in body for serverless
+        console.log("📡 Using serverless API:", url);
+    } else {
+        // Local: Direct API call
+        const endpoint = stream ? 'streamGenerateContent?alt=sse' : 'generateContent';
+        url = `${CONFIG.geminiEndpoint}${model}:${endpoint}`;
+        headers = {
+            "Content-Type": "application/json",
+            "x-goog-api-key": CONFIG.geminiApiKey
+        };
+        console.log("📡 Direct API URL:", url);
+    }
+
+    return await fetch(url, {
+        method: "POST",
+        headers: headers,
+        body: JSON.stringify(body)
+    });
+}
 
 // ===========================================
 function getModelForTask(taskType, hasFile = false, fileType = null) {
@@ -4101,17 +4135,7 @@ Rules:
             }
         };
 
-        const metadataResponse = await fetch(
-            `${CONFIG.geminiEndpoint}gemini-2.0-flash:generateContent`,
-            {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "x-goog-api-key": CONFIG.geminiApiKey
-                },
-                body: JSON.stringify(metadataBody)
-            }
-        );
+        const metadataResponse = await callGeminiAPI("gemini-2.0-flash", metadataBody, false);
 
         if (!metadataResponse.ok) {
             console.error("Chapter metadata extraction failed:", await metadataResponse.text());
@@ -4188,17 +4212,7 @@ Rules:
                     }
                 };
 
-                const contentResponse = await fetch(
-                    `${CONFIG.geminiEndpoint}gemini-2.0-flash:generateContent`,
-                    {
-                        method: "POST",
-                        headers: {
-                            "Content-Type": "application/json",
-                            "x-goog-api-key": CONFIG.geminiApiKey
-                        },
-                        body: JSON.stringify(contentBody)
-                    }
-                );
+                const contentResponse = await callGeminiAPI("gemini-2.0-flash", contentBody, false);
 
                 if (contentResponse.ok) {
                     const contentData = await contentResponse.json();
@@ -4819,20 +4833,28 @@ INSTRUCTIONS: Teach from this textbook content. Use examples and explanations fr
             });
         });
 
-        // API endpoint - use selected model
-        const url = `${CONFIG.geminiEndpoint}${model}:streamGenerateContent?alt=sse`;
-        console.log("📡 API URL:", url);
+        // API endpoint - use serverless in production, direct in local
+        let url, headers;
+        if (CONFIG.isProduction) {
+            url = CONFIG.apiEndpoints.geminiStream;
+            headers = { "Content-Type": "application/json" };
+            body.model = model; // Include model in body for serverless
+            console.log("📡 Using serverless API:", url);
+        } else {
+            url = `${CONFIG.geminiEndpoint}${model}:streamGenerateContent?alt=sse`;
+            headers = {
+                "Content-Type": "application/json",
+                "x-goog-api-key": CONFIG.geminiApiKey
+            };
+            console.log("📡 API URL:", url);
+        }
         console.log("🤖 Model:", model);
-        console.log("🔑 API Key exists:", !!CONFIG.geminiApiKey);
         console.log("🧠 Thinking level:", generationConfig.thinkingConfig?.thinkingLevel);
 
 
         const response = await fetch(url, {
             method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "x-goog-api-key": CONFIG.geminiApiKey
-            },
+            headers: headers,
             body: JSON.stringify(body),
             signal: aiController.signal
         });
@@ -5072,17 +5094,9 @@ Include citations from your search results when possible.`;
         tools: [{ googleSearch: {} }]
     };
 
-    const url = `${CONFIG.geminiEndpoint}${model}:generateContent`;
     console.log("🔬 Research using model:", model);
 
-    const response = await fetch(url, {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            "x-goog-api-key": CONFIG.geminiApiKey
-        },
-        body: JSON.stringify(body)
-    });
+    const response = await callGeminiAPI(model, body, false);
 
     if (!response.ok) {
         throw new Error(`Research API Error: ${response.status}`);
@@ -5124,18 +5138,10 @@ async function generateEducationalImage(prompt) {
         }
     };
 
-    const url = `${CONFIG.geminiEndpoint}${model}:generateContent`;
     console.log(`🎨 Image generation using ${isBengali ? 'Nano Banana Pro' : 'Nano Banana'} (${model}) @ 1K resolution`);
 
     try {
-        const response = await fetch(url, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "x-goog-api-key": CONFIG.geminiApiKey
-            },
-            body: JSON.stringify(body)
-        });
+        const response = await callGeminiAPI(model, body, false);
 
         if (!response.ok) {
             const errorText = await response.text();
@@ -5472,14 +5478,7 @@ async function processQuizMode(message) {
                     generationConfig: buildGenerationConfig('chat')
                 };
 
-                const response = await fetch(`${CONFIG.geminiEndpoint}${quizModel}:generateContent`, {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        "x-goog-api-key": CONFIG.geminiApiKey
-                    },
-                    body: JSON.stringify(body)
-                });
+                const response = await callGeminiAPI(quizModel, body, false);
 
                 const data = await response.json();
                 return data.candidates?.[0]?.content?.parts?.[0]?.text || "";
@@ -6018,11 +6017,8 @@ async function generateElevenLabsTTS(text, langConfig) {
 
     // This ensures female teacher uses Rachel voice, male uses Adam voice
     const voiceId = CONFIG.tts.elevenLabsVoice;
-    const url = `${CONFIG.elevenLabsEndpoint}/text-to-speech/${voiceId}`;
-
 
     const shortCode = langConfig.google?.code?.split('-')[0] || 'en';
-
 
     // Use eleven_multilingual_v2 for other languages
     const isBengali = shortCode === 'bn';
@@ -6040,28 +6036,39 @@ async function generateElevenLabsTTS(text, langConfig) {
         }
     };
 
-
-
     try {
-        const response = await fetch(url, {
-            method: "POST",
-            headers: {
-                "Accept": "audio/mpeg",
-                "Content-Type": "application/json",
-                "xi-api-key": CONFIG.elevenLabsApiKey
-            },
-            body: JSON.stringify(requestBody)
-        });
+        let response;
+
+        if (CONFIG.isProduction) {
+            // Use serverless API in production
+            console.log("📡 Using serverless TTS API");
+            response = await fetch(CONFIG.apiEndpoints.tts, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    text: text,
+                    voiceId: voiceId,
+                    modelId: modelId,
+                    voiceSettings: requestBody.voice_settings
+                })
+            });
+        } else {
+            // Direct API call for local development
+            const url = `${CONFIG.elevenLabsEndpoint}/text-to-speech/${voiceId}`;
+            response = await fetch(url, {
+                method: "POST",
+                headers: {
+                    "Accept": "audio/mpeg",
+                    "Content-Type": "application/json",
+                    "xi-api-key": CONFIG.elevenLabsApiKey
+                },
+                body: JSON.stringify(requestBody)
+            });
+        }
 
         console.log("🎙️ TTS Response status:", response.status);
-
-        // Get character cost from headers
-        const charCount = response.headers.get('x-character-count');
-        const requestId = response.headers.get('request-id');
-
-        if (charCount) {
-            console.log("💰 Character cost:", charCount, "| Request ID:", requestId);
-        }
 
         if (!response.ok) {
             const errorText = await response.text();
@@ -6069,19 +6076,35 @@ async function generateElevenLabsTTS(text, langConfig) {
             throw new Error(`ElevenLabs TTS Error: ${response.status}`);
         }
 
+        // Handle response based on environment
+        if (CONFIG.isProduction) {
+            // Serverless returns JSON with base64 audio
+            const data = await response.json();
+            if (data.audio) {
+                console.log("✅ ElevenLabs Audio received (serverless)");
+                return {
+                    data: data.audio,
+                    mimeType: data.contentType || 'audio/mpeg'
+                };
+            }
+        } else {
+            // Direct API returns ArrayBuffer
+            // Get character cost from headers
+            const charCount = response.headers.get('x-character-count');
+            const requestId = response.headers.get('request-id');
+            if (charCount) {
+                console.log("💰 Character cost:", charCount, "| Request ID:", requestId);
+            }
 
-        const audioBuffer = await response.arrayBuffer();
-
-        if (audioBuffer && audioBuffer.byteLength > 0) {
-            console.log("✅ ElevenLabs Audio received | Size:", audioBuffer.byteLength, "bytes");
-
-
-            const base64Audio = arrayBufferToBase64(audioBuffer);
-
-            return {
-                data: base64Audio,  // Base64 MP3 audio
-                mimeType: 'audio/mpeg'
-            };
+            const audioBuffer = await response.arrayBuffer();
+            if (audioBuffer && audioBuffer.byteLength > 0) {
+                console.log("✅ ElevenLabs Audio received | Size:", audioBuffer.byteLength, "bytes");
+                const base64Audio = arrayBufferToBase64(audioBuffer);
+                return {
+                    data: base64Audio,
+                    mimeType: 'audio/mpeg'
+                };
+            }
         }
 
         console.warn("⚠️ No audio data in ElevenLabs response");
