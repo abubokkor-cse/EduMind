@@ -13,17 +13,16 @@
     <!-- ES Module Shims for Import Map Support -->
     <script async src="https://cdn.jsdelivr.net/npm/es-module-shims@1.8.0/dist/es-module-shims.js"></script>
 
-    <!-- Import Map for ES Modules (all local) -->
+    <!-- Import Map for ES Modules (local libraries) -->
     <script type="importmap">
     {
         "imports": {
             "talkinghead": "./modules/edumindHead.js",
-            "marked": "./node_modules/marked/lib/marked.esm.js",
-            "dompurify": "./node_modules/dompurify/dist/purify.es.mjs",
-            "three": "./node_modules/three/build/three.module.js",
-            "three/addons/": "./node_modules/three/examples/jsm/",
-            "three/examples/jsm/": "./node_modules/three/examples/jsm/",
-            "ogl": "./node_modules/ogl/src/index.js"
+            "marked": "./lib/marked.esm.js",
+            "dompurify": "./lib/purify.es.mjs",
+            "three": "./lib/three/three.module.js",
+            "three/addons/": "./lib/three/examples/jsm/",
+            "three/examples/jsm/": "./lib/three/examples/jsm/"
         }
     }
     </script>
