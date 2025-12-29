@@ -5544,6 +5544,9 @@ async function playTTSAudiosInOrder(ttsPromises) {
     let isPlaying = false;
     let playbackComplete = false;
 
+    // Reset global abort flag
+    shouldAbortPlayback = false;
+
 
     isSpeaking = true;
 
@@ -5563,13 +5566,13 @@ async function playTTSAudiosInOrder(ttsPromises) {
 
 
     async function playNextAudio() {
-        if (isPlaying || playbackComplete) return;
+        if (isPlaying || playbackComplete || shouldAbortPlayback) return;
 
         // Check if current index is ready
         if (audioResults[currentPlayIndex] !== null) {
             const result = audioResults[currentPlayIndex];
 
-            if (result.audioData) {
+            if (result.audioData && !shouldAbortPlayback) {
                 isPlaying = true;
                 console.log(`▶️ Playing S${currentPlayIndex + 1}...`);
 
@@ -5585,7 +5588,7 @@ async function playTTSAudiosInOrder(ttsPromises) {
             currentPlayIndex++;
 
 
-            if (currentPlayIndex < totalCount) {
+            if (currentPlayIndex < totalCount && !shouldAbortPlayback) {
 
                 playNextAudio();
             } else {
@@ -5662,6 +5665,7 @@ const speechQueue = [];
 let isSpeaking = false;
 let isPaused = false;
 let currentAudioSource = null;
+let shouldAbortPlayback = false; // Global abort flag for parallel TTS
 
 function queueSpeech(text) {
     if (!text.trim()) return;
@@ -5674,6 +5678,8 @@ function queueSpeech(text) {
 function stopSpeech() {
     console.log("⏹️ Stopping speech...");
 
+    // Abort any parallel TTS playback in progress
+    shouldAbortPlayback = true;
 
     speechQueue.length = 0;
 
