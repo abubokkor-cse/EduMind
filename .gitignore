@@ -7,8 +7,9 @@ package-lock.json
 .env.local
 .env.production
 
-# API Keys - Stripe only (Firebase keys are public by design)
-stripe-config.js
+# OS Files
+.DS_Store
+Thumbs.db
 
 # OS Files
 .DS_Store
