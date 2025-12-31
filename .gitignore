@@ -11,10 +11,6 @@ package-lock.json
 .DS_Store
 Thumbs.db
 
-# OS Files
-.DS_Store
-Thumbs.db
-
 # IDE
 .vscode/
 .idea/

@@ -1125,9 +1125,18 @@ export async function getTextbookChapters(textbookId) {
         const startTime = Date.now();
 
         const chaptersRef = collection(db, 'textbook_chapters');
-        // Simple query without orderBy to avoid index issues
-        const q = query(chaptersRef, where('bookId', '==', textbookId));
 
+        // First, get all chapters to debug
+        const allSnapshot = await getDocs(chaptersRef);
+        console.log(`📚 Total chapters in collection: ${allSnapshot.size}`);
+        if (allSnapshot.size > 0 && allSnapshot.size < 10) {
+            allSnapshot.forEach(doc => {
+                console.log(`  Chapter ${doc.id}:`, doc.data().bookId, 'vs', textbookId);
+            });
+        }
+
+        // Now query for specific book
+        const q = query(chaptersRef, where('bookId', '==', textbookId));
         const snapshot = await getDocs(q);
         console.log(`Query took ${Date.now() - startTime}ms, found ${snapshot.size} chapters`);
 

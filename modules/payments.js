@@ -7,7 +7,8 @@ import {
     STRIPE_PUBLISHABLE_KEY,
     SUBSCRIPTION_PLANS,
     CREDIT_COSTS,
-    CREDIT_PACKAGES
+    CREDIT_PACKAGES,
+    getUserCurrency
 } from '../stripe-config.js';
 
 import { auth, db } from '../firebase-config.js';
@@ -17,9 +18,10 @@ import { doc, getDoc, setDoc, updateDoc, increment, serverTimestamp } from 'http
 // Initialize Stripe
 
 let stripe = null;
+let userCurrency = 'USD'; // Default
 
 export async function initStripe() {
-    
+
     if (!window.Stripe) {
         const script = document.createElement('script');
         script.src = 'https://js.stripe.com/v3/';
@@ -37,13 +39,70 @@ export async function initStripe() {
 }
 
 // ===========================================
+// CURRENCY DETECTION & DISPLAY
+// ===========================================
+
+// Detect and set user currency based on profile
+export function setUserCurrency(studentProfile) {
+    if (!studentProfile) {
+        userCurrency = 'USD';
+        return;
+    }
+
+    // Check country code or country name
+    const country = studentProfile.country || studentProfile.countryCode || studentProfile.countryName || '';
+    userCurrency = getUserCurrency(country);
+    console.log(`💰 Currency set to: ${userCurrency} (Country: ${country})`);
+    return userCurrency;
+}
+
+// Get current user currency
+export function getCurrentCurrency() {
+    return userCurrency;
+}
+
+// Format price with correct currency symbol
+export function formatPrice(amount, currency = null) {
+    const curr = currency || userCurrency;
+    if (curr === 'BDT') {
+        return `৳${amount}`;
+    }
+    return `$${amount}`;
+}
+
+// Get plan price in user's currency
+export function getPlanPrice(planId) {
+    const plan = SUBSCRIPTION_PLANS[planId];
+    if (!plan) return null;
+
+    const price = typeof plan.price === 'object' ? plan.price[userCurrency] : plan.price;
+    return {
+        amount: price,
+        formatted: formatPrice(price),
+        currency: userCurrency
+    };
+}
+
+// Get credit package price in user's currency
+export function getPackagePrice(packageId) {
+    const pkg = CREDIT_PACKAGES[packageId];
+    if (!pkg) return null;
+
+    const price = typeof pkg.price === 'object' ? pkg.price[userCurrency] : pkg.price;
+    return {
+        amount: price,
+        formatted: formatPrice(price),
+        currency: userCurrency,
+        credits: pkg.credits + (pkg.bonus || 0)
+    };
+}
 
 
 
 // Get user's current subscription status
 export async function getUserSubscription(userId) {
     if (!userId) {
-        
+
         const localSub = localStorage.getItem('edumind_subscription');
         if (localSub) {
             return JSON.parse(localSub);
@@ -58,7 +117,7 @@ export async function getUserSubscription(userId) {
         if (subDoc.exists()) {
             return subDoc.data();
         } else {
-            
+
             const defaultSub = getDefaultSubscription();
             await setDoc(subRef, defaultSub);
             return defaultSub;
@@ -119,12 +178,12 @@ export async function deductCredits(userId, action, amount = null) {
         return { success: true, unlimited: true };
     }
 
-    
+
     const today = new Date().toDateString();
     let dailyUsage = subscription.dailyUsage || {};
 
     if (dailyUsage.lastReset !== today) {
-        
+
         dailyUsage = {
             conversations: 0,
             quizzes: 0,
@@ -137,7 +196,7 @@ export async function deductCredits(userId, action, amount = null) {
         subscription.credits = plan.credits.daily;
     }
 
-    
+
     if (subscription.credits < cost) {
         return {
             success: false,
@@ -147,7 +206,7 @@ export async function deductCredits(userId, action, amount = null) {
         };
     }
 
-    
+
     if (action === 'aiConversation' && limits.dailyConversations > 0) {
         if (dailyUsage.conversations >= limits.dailyConversations) {
             return {
@@ -187,7 +246,7 @@ export async function deductCredits(userId, action, amount = null) {
             console.error("Error updating credits:", error);
         }
     } else {
-        
+
         subscription.credits = newCredits;
         subscription.totalCreditsUsed = newTotalUsed;
         subscription.dailyUsage = dailyUsage;
@@ -244,7 +303,7 @@ export async function createCheckoutSession(planId, userId) {
         throw new Error('Invalid plan or price not configured');
     }
 
-    
+
     // In production, you'd create a checkout session on your server
 
     const paymentData = {
@@ -255,10 +314,10 @@ export async function createCheckoutSession(planId, userId) {
         timestamp: Date.now()
     };
 
-    
+
     localStorage.setItem('pending_payment', JSON.stringify(paymentData));
 
-    
+
     return {
         sessionId: `demo_session_${Date.now()}`,
         url: null, // Would be Stripe checkout URL in production
@@ -323,7 +382,7 @@ export async function purchaseCredits(packageId, userId) {
     const result = await addCredits(userId, totalCredits, `purchase_${packageId}`);
 
     if (result.success) {
-        
+
         if (userId) {
             const purchaseRef = doc(db, 'purchases', `${userId}_${Date.now()}`);
             await setDoc(purchaseRef, {
@@ -342,7 +401,26 @@ export async function purchaseCredits(packageId, userId) {
 
 // UI Functions
 
+// Helper to get price value for a plan
+function getPlanPriceValue(plan) {
+    if (typeof plan.price === 'object') {
+        return plan.price[userCurrency] || plan.price.USD;
+    }
+    return plan.price;
+}
 
+// Helper to get currency symbol
+function getCurrencySymbol() {
+    return userCurrency === 'BDT' ? '৳' : '$';
+}
+
+// Helper to get package price value
+function getPackagePriceValue(pkg) {
+    if (typeof pkg.price === 'object') {
+        return pkg.price[userCurrency] || pkg.price.USD;
+    }
+    return pkg.price;
+}
 
 export function showSubscriptionPlans() {
     const existingModal = document.getElementById('subscription-modal');
@@ -350,6 +428,8 @@ export function showSubscriptionPlans() {
         existingModal.classList.remove('hidden');
         return;
     }
+
+    const currencySymbol = getCurrencySymbol();
 
     const modal = document.createElement('div');
     modal.id = 'subscription-modal';
@@ -361,14 +441,16 @@ export function showSubscriptionPlans() {
                 <button class="close-modal-btn" onclick="document.getElementById('subscription-modal').classList.add('hidden')">×</button>
             </div>
             <div class="plans-container">
-                ${Object.values(SUBSCRIPTION_PLANS).map(plan => `
+                ${Object.values(SUBSCRIPTION_PLANS).map(plan => {
+        const priceValue = getPlanPriceValue(plan);
+        return `
                     <div class="plan-card ${plan.popular ? 'popular' : ''}" data-plan-id="${plan.id}">
                         ${plan.popular ? '<div class="popular-badge">Most Popular</div>' : ''}
                         <h3>${plan.name}</h3>
                         <div class="plan-price">
-                            ${plan.price === 0 ? '<span class="price">Free</span>' : `
-                                <span class="currency">$</span>
-                                <span class="price">${plan.price}</span>
+                            ${priceValue === 0 ? '<span class="price">Free</span>' : `
+                                <span class="currency">${currencySymbol}</span>
+                                <span class="price">${priceValue}</span>
                                 <span class="interval">/month</span>
                             `}
                         </div>
@@ -385,20 +467,22 @@ export function showSubscriptionPlans() {
                             ${plan.id === 'free' ? 'Current Plan' : 'Select Plan'}
                         </button>
                     </div>
-                `).join('')}
+                `}).join('')}
             </div>
             <div class="credit-packages-section">
                 <h3>💎 Need More Credits?</h3>
                 <div class="credit-packages">
-                    ${Object.values(CREDIT_PACKAGES).map(pkg => `
+                    ${Object.values(CREDIT_PACKAGES).map(pkg => {
+            const pkgPrice = getPackagePriceValue(pkg);
+            return `
                         <div class="credit-package" data-package-id="${pkg.id}">
                             <span class="package-credits">${pkg.credits}</span>
                             <span class="package-name">${pkg.name}</span>
                             ${pkg.bonus ? `<span class="package-bonus">+${pkg.bonus} bonus!</span>` : ''}
-                            <span class="package-price">$${pkg.price}</span>
+                            <span class="package-price">${currencySymbol}${pkgPrice}</span>
                             <button class="buy-credits-btn" data-package="${pkg.id}">Buy</button>
                         </div>
-                    `).join('')}
+                    `}).join('')}
                 </div>
             </div>
         </div>
@@ -425,24 +509,27 @@ export function showSubscriptionPlans() {
 
 async function handlePlanSelection(planId) {
     const plan = SUBSCRIPTION_PLANS[planId];
-    showStripePaymentModal('subscription', planId, plan.price, plan.name);
+    const priceValue = getPlanPriceValue(plan);
+    showStripePaymentModal('subscription', planId, priceValue, plan.name);
 }
 
 
 async function handleCreditPurchase(packageId) {
     const pkg = CREDIT_PACKAGES[packageId];
     const totalCredits = pkg.credits + (pkg.bonus || 0);
-    showStripePaymentModal('credits', packageId, pkg.price, `${pkg.name}${pkg.bonus ? ` (+${pkg.bonus} bonus)` : ''}`);
+    const pkgPrice = getPackagePriceValue(pkg);
+    showStripePaymentModal('credits', packageId, pkgPrice, `${pkg.name}${pkg.bonus ? ` (+${pkg.bonus} bonus)` : ''}`);
 }
 
 // Show Stripe Payment Modal
 async function showStripePaymentModal(type, itemId, price, itemName) {
-    
+
     const existingPayment = document.getElementById('stripe-payment-modal');
     if (existingPayment) existingPayment.remove();
 
     const user = auth.currentUser;
     const userEmail = user?.email || '';
+    const currencySymbol = getCurrencySymbol();
 
     const modal = document.createElement('div');
     modal.id = 'stripe-payment-modal';
@@ -457,7 +544,7 @@ async function showStripePaymentModal(type, itemId, price, itemName) {
             <div class="payment-summary">
                 <div class="payment-item">
                     <span class="item-name">${itemName}</span>
-                    <span class="item-price">$${price.toFixed(2)}</span>
+                    <span class="item-price">${currencySymbol}${typeof price === 'number' ? price.toFixed(2) : price}</span>
                 </div>
                 ${type === 'subscription' ? '<p class="recurring-note">Billed monthly • Cancel anytime</p>' : ''}
             </div>
@@ -482,7 +569,7 @@ async function showStripePaymentModal(type, itemId, price, itemName) {
                 </div>
 
                 <button type="submit" id="submit-payment" class="submit-payment-btn">
-                    <span id="button-text">Pay $${price.toFixed(2)}</span>
+                    <span id="button-text">Pay ${currencySymbol}${typeof price === 'number' ? price.toFixed(2) : price}</span>
                     <span id="spinner" class="spinner hidden"></span>
                 </button>
             </form>
@@ -507,7 +594,7 @@ async function showStripePaymentModal(type, itemId, price, itemName) {
 
     document.body.appendChild(modal);
 
-    
+
     await initStripeElements(type, itemId, price, itemName);
 
     // Close button handler
@@ -515,7 +602,7 @@ async function showStripePaymentModal(type, itemId, price, itemName) {
         modal.remove();
     });
 
-    
+
     modal.addEventListener('click', (e) => {
         if (e.target === modal) {
             modal.remove();
@@ -551,7 +638,7 @@ async function initStripeElements(type, itemId, price, itemName) {
     const cardElement = elements.create('card', { style });
     cardElement.mount('#card-element');
 
-    
+
     cardElement.on('change', (event) => {
         const displayError = document.getElementById('card-errors');
         if (event.error) {
@@ -561,7 +648,7 @@ async function initStripeElements(type, itemId, price, itemName) {
         }
     });
 
-    
+
     const form = document.getElementById('stripe-payment-form');
     form.addEventListener('submit', async (event) => {
         event.preventDefault();
@@ -579,7 +666,7 @@ async function initStripeElements(type, itemId, price, itemName) {
         const name = document.getElementById('cardholder-name').value;
 
         try {
-            
+
             const { paymentMethod, error } = await stripe.createPaymentMethod({
                 type: 'card',
                 card: cardElement,
@@ -595,7 +682,7 @@ async function initStripeElements(type, itemId, price, itemName) {
 
             console.log('✅ Payment method created:', paymentMethod.id);
 
-            
+
             // In production, you'd send paymentMethod.id to your server to create a subscription/charge
             await processTestPayment(type, itemId, paymentMethod.id, email);
 
@@ -614,7 +701,7 @@ async function processTestPayment(type, itemId, paymentMethodId, email) {
     const user = auth.currentUser;
     const userId = user?.uid || null;
 
-    
+
     await new Promise(resolve => setTimeout(resolve, 1500));
 
     let result;
@@ -629,10 +716,10 @@ async function processTestPayment(type, itemId, paymentMethodId, email) {
         document.getElementById('stripe-payment-form').classList.add('hidden');
         document.getElementById('payment-success').classList.remove('hidden');
 
-        
+
         updateCreditsDisplay();
 
-        
+
         document.getElementById('close-success').addEventListener('click', () => {
             document.getElementById('stripe-payment-modal').remove();
             document.getElementById('subscription-modal')?.classList.add('hidden');
@@ -690,7 +777,7 @@ export async function updateCreditsDisplay() {
         if (progressStats) progressStats.textContent = `${topicsLearned} topics`;
     }
 
-    
+
     const creditsBtnText = document.getElementById('credits-btn-text');
     if (creditsBtnText) {
         creditsBtnText.textContent = credits.available === -1 ? '∞' : credits.available;
@@ -719,7 +806,7 @@ export async function canPerformAction(action) {
         return { allowed: true, unlimited: true };
     }
 
-    
+
     if (subscription.credits < cost) {
         return {
             allowed: false,
@@ -730,7 +817,7 @@ export async function canPerformAction(action) {
         };
     }
 
-    
+
     const today = new Date().toDateString();
     const dailyUsage = subscription.dailyUsage || {};
 
@@ -803,7 +890,7 @@ export async function initPayments() {
     try {
         await initStripe();
 
-        
+
         const header = document.querySelector('.glass-header') || document.querySelector('header');
         if (header) {
             const creditsDisplay = createCreditsDisplay();
@@ -812,7 +899,7 @@ export async function initPayments() {
             headerContent.appendChild(creditsDisplay);
         }
 
-        
+
         await updateCreditsDisplay();
 
         console.log("✅ Payment system initialized");

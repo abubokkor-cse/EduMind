@@ -42,7 +42,7 @@
 
 ### Frontend
 - **UI**: Vanilla JavaScript, HTML5, CSS3 (Liquid Glass design)
-- **3D Rendering**: Three.js + TalkingHead.js
+- **3D Rendering**: Three.js + Custom Avatar System (edumindHead.js)
 - **Avatars**: Ready Player Me (custom Bangladesh avatars)
 - **3D Environment**: Real classroom (classroom_default.glb)
 - **Responsive**: 480px/768px/1024px breakpoints
@@ -212,7 +212,6 @@ or use of this software is strictly prohibited.
 ### Open-Source Components Used:
 EduMind is built using open-source libraries under their respective licenses:
 - Three.js (MIT License)
-- TalkingHead.js (MIT License)
 - Firebase SDK (Apache 2.0)
 - Marked.js (MIT License)
 - DOMPurify (Apache 2.0 / MPL)

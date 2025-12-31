@@ -27,19 +27,16 @@ EduMind is built using the following open-source libraries and tools:
 1. Three.js (MIT License) - 3D rendering engine
    https://github.com/mrdoob/three.js
 
-2. TalkingHead.js (MIT License) - 3D avatar with lip-sync
-   https://github.com/met4citizen/TalkingHead
-
-3. Firebase SDK (Apache 2.0 License) - Backend services
+2. Firebase SDK (Apache 2.0 License) - Backend services
    https://firebase.google.com
 
-4. Marked.js (MIT License) - Markdown parser
+3. Marked.js (MIT License) - Markdown parser
    https://github.com/markedjs/marked
 
-5. DOMPurify (Apache 2.0 / Mozilla License) - XSS sanitizer
+4. DOMPurify (Apache 2.0 / Mozilla License) - XSS sanitizer
    https://github.com/cure53/DOMPurify
 
-6. Ready Player Me - 3D avatar models
+5. Ready Player Me - 3D avatar models
    https://readyplayer.me
 
 All third-party open-source components remain under their respective licenses.

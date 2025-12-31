@@ -1,6 +1,6 @@
 
 
-import { TalkingHead } from "talkinghead";
+import { TalkingHead } from "./modules/edumindHead.js";
 import { marked } from "marked";
 import dompurify from "dompurify";
 import * as THREE from "three";
@@ -83,13 +83,25 @@ import {
     showSubscriptionPlans,
     showUpgradePrompt,
     updateCreditsDisplay,
-    CREDIT_COSTS
+    CREDIT_COSTS,
+    setUserCurrency,
+    getCurrentCurrency,
+    formatPrice,
+    getPlanPrice,
+    getPackagePrice
 } from "./modules/payments.js";
 
 // ===========================================
 
 // Production detection - use serverless API endpoints on Vercel
 const IS_PRODUCTION = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+
+// Make currency functions globally available
+window.setUserCurrency = setUserCurrency;
+window.getCurrentCurrency = getCurrentCurrency;
+window.formatPrice = formatPrice;
+window.getPlanPrice = getPlanPrice;
+window.getPackagePrice = getPackagePrice;
 console.log("🌐 Environment:", IS_PRODUCTION ? "PRODUCTION (using serverless APIs)" : "LOCAL (using direct APIs)");
 
 const CONFIG = {
@@ -1463,6 +1475,11 @@ async function loadStudentProfile() {
         if (localSaved) {
             studentProfile = JSON.parse(localSaved);
             isOnboarded = true;
+
+            // Set currency based on profile
+            if (window.setUserCurrency) {
+                window.setUserCurrency(studentProfile);
+            }
         }
 
 
@@ -1477,6 +1494,11 @@ async function loadStudentProfile() {
                     localStorage.setItem('edumind_student_profile', JSON.stringify(profileResult.data));
                     console.log("✅ Student profile loaded from Firestore for:", user.email);
 
+                    // Set currency based on profile
+                    if (window.setUserCurrency) {
+                        window.setUserCurrency(studentProfile);
+                    }
+
                     // Update profile display
                     updateProfileDisplay(user);
                 }
@@ -1490,6 +1512,11 @@ async function loadStudentProfile() {
             if (firebaseProfile) {
                 studentProfile = firebaseProfile;
                 localStorage.setItem('edumind_student_profile', JSON.stringify(firebaseProfile));
+
+                // Set currency based on profile
+                if (window.setUserCurrency) {
+                    window.setUserCurrency(firebaseProfile);
+                }
             }
         }
     } catch (e) {
