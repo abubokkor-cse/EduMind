@@ -5967,8 +5967,9 @@ async function announceDrawing(isBengali) {
 async function processQuizMode(message) {
     // Extract subject/topic from message
     const curriculumInfo = extractCurriculumInfo(message);
-    const subject = curriculumInfo.subject || studentProfile?.subjects?.[0] || 'General';
-    const topic = curriculumInfo.topic || 'General Knowledge';
+    // Use student's first subject (their main subject based on class/stream)
+    const subject = curriculumInfo.subject || studentProfile?.subjects?.[0] || studentProfile?.programCode || 'General';
+    const topic = curriculumInfo.topic || studentProfile?.subjects?.[0] || 'General Knowledge';
 
     // Start conversational quiz flow - ask how many questions
     quizConversationState = {
@@ -5979,12 +5980,20 @@ async function processQuizMode(message) {
         count: 10
     };
 
-    const askMessage = `Great! Let's test your knowledge on **${subject}** - ${topic}! 🎯\n\nHow many questions would you like?\n• **5** - Quick quiz\n• **10** - Standard quiz\n• **15** - Extended quiz\n• **20** - Full challenge\n\nJust tell me a number!`;
+    // Check if message is in Bangla
+    const isBangla = /[\u0980-\u09FF]/.test(message);
+
+    const askMessage = isBangla
+        ? `চমৎকার! চলো **${subject}** - ${topic} থেকে তোমার জ্ঞান পরীক্ষা করি! 🎯\n\nকয়টা প্রশ্ন চাও?\n• **৫** - দ্রুত কুইজ\n• **১০** - স্ট্যান্ডার্ড কুইজ\n• **১৫** - বড় কুইজ\n• **২০** - পূর্ণ চ্যালেঞ্জ\n\nশুধু সংখ্যা বলো!`
+        : `Great! Let's test your knowledge on **${subject}** - ${topic}! 🎯\n\nHow many questions would you like?\n• **5** - Quick quiz\n• **10** - Standard quiz\n• **15** - Extended quiz\n• **20** - Full challenge\n\nJust tell me a number!`;
 
     addMessageToChat(askMessage, "teacher");
 
     if (head) {
-        await speakText(`Great! Let's test your knowledge on ${subject}. How many questions would you like? 5, 10, 15, or 20?`);
+        const speakMsg = isBangla
+            ? `চমৎকার! ${subject} থেকে কুইজ খেলবো। কয়টা প্রশ্ন চাও? ৫, ১০, ১৫ অথবা ২০?`
+            : `Great! Let's test your knowledge on ${subject}. How many questions would you like? 5, 10, 15, or 20?`;
+        await speakText(speakMsg);
     }
 }
 
@@ -8199,7 +8208,8 @@ async function generateAndShowQuiz(subject, topic, count) {
 
         if (head) {
             TeacherBehavior.setMood('happy');
-            await speakText(`Quiz ready! Here's your first question: ${quizOverlayState.questions[0].question}`);
+            // Only announce quiz is ready - don't read questions
+            await speakText(`Quiz ready! ${count} questions for you. Good luck!`);
             setTimeout(() => TeacherBehavior.setMood('neutral'), 2000);
         }
 
@@ -8430,15 +8440,12 @@ async function handleQuizOverlayOptionClick(e) {
             showQuizResults();
         }, 1500);
     } else {
-        // Auto advance to next unanswered question
+        // Auto advance to next unanswered question (silently)
         setTimeout(() => {
             const nextUnanswered = quizOverlayState.answers.findIndex(a => a === null);
             if (nextUnanswered !== -1) {
                 renderQuizOverlayQuestion(nextUnanswered);
-                // Teacher reads next question
-                if (head) {
-                    speakText(quizOverlayState.questions[nextUnanswered].question);
-                }
+                // Don't read questions - let student read silently
             }
         }, 1200);
     }
