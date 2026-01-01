@@ -5967,58 +5967,53 @@ async function processQuizMode(message) {
     // Check if message is in Bangla
     const isBangla = /[\u0980-\u09FF]/.test(message);
 
-    // Get student's subjects from profile
-    const studentSubjects = studentProfile?.subjects || [];
-    const programCode = studentProfile?.programCode || studentProfile?.programName || '';
+    // Get student's subjects from profile - check all possible sources
+    let studentSubjects = studentProfile?.subjects || [];
+    const programCode = studentProfile?.programCode || studentProfile?.programName || studentProfile?.program || '';
+    const department = studentProfile?.department || '';
 
-    // Start conversational quiz flow - first ask which subject via AI
+    // Debug log
+    console.log("📚 Quiz Mode - Student Profile:", {
+        subjects: studentSubjects,
+        programCode,
+        department,
+        fullProfile: studentProfile
+    });
+
+    // If subjects array is empty but we have program info, use that
+    if (studentSubjects.length === 0 && programCode) {
+        // For university students, use program as main subject
+        studentSubjects = [programCode];
+    }
+
+    // Start conversational quiz flow - first ask which subject
     quizConversationState = {
         active: true,
-        waitingFor: 'subject', // First ask subject, then count
+        waitingFor: 'subject',
         subject: null,
         topic: null,
         count: 10,
-        isBangla: isBangla
+        isBangla: isBangla,
+        availableSubjects: studentSubjects
     };
 
-    // Use AI to ask which subject based on student profile
+    // Build subject list for display
     const subjectList = studentSubjects.length > 0
         ? studentSubjects.join(', ')
-        : programCode || 'your subjects';
+        : programCode || department || 'General';
 
-    const aiPrompt = isBangla
-        ? `শিক্ষার্থী কুইজ দিতে চায়। তার বিষয়গুলো হলো: ${subjectList}। 
-           তাকে জিজ্ঞেস করো কোন বিষয়ে কুইজ দিতে চায়। 
-           শুধু প্রশ্ন করো, ২-৩ লাইনে। বিষয়গুলোর নাম উল্লেখ করো।`
-        : `Student wants to take a quiz. Their subjects are: ${subjectList}. 
-           Ask them which subject they want to be quizzed on. 
-           Keep it short (2-3 lines). List their subjects.`;
+    // Direct message asking which subject (no AI call needed)
+    const askMessage = isBangla
+        ? `চমৎকার! তুমি কুইজ দিতে চাও! 🎯\n\nতোমার বিষয়: **${subjectList}**\n\nকোন বিষয়ে কুইজ দিতে চাও? বিষয়ের নাম বলো!`
+        : `Great! You want a quiz! 🎯\n\nYour subjects: **${subjectList}**\n\nWhich subject do you want to quiz on? Tell me the subject name!`;
 
-    try {
-        const quizModel = getModelForTask('chat');
-        const body = {
-            contents: [{ role: "user", parts: [{ text: aiPrompt }] }],
-            generationConfig: buildGenerationConfig('chat')
-        };
+    addMessageToChat(askMessage, "teacher");
 
-        const response = await callGeminiAPI(quizModel, body, false);
-        const data = await response.json();
-        const aiResponse = data.candidates?.[0]?.content?.parts?.[0]?.text ||
-            (isBangla ? "কোন বিষয়ে কুইজ দিতে চাও?" : "Which subject do you want to quiz on?");
-
-        addMessageToChat(aiResponse, "teacher");
-
-        if (head) {
-            await speakText(aiResponse);
-        }
-    } catch (error) {
-        console.error("Quiz mode AI error:", error);
-        // Fallback message
-        const fallbackMsg = isBangla
-            ? `কোন বিষয়ে কুইজ দিতে চাও? তোমার বিষয়: ${subjectList}`
-            : `Which subject would you like to quiz on? Your subjects: ${subjectList}`;
-        addMessageToChat(fallbackMsg, "teacher");
-        if (head) await speakText(fallbackMsg);
+    if (head) {
+        const speakMsg = isBangla
+            ? `চমৎকার! তোমার বিষয় হলো ${subjectList}। কোন বিষয়ে কুইজ দিতে চাও?`
+            : `Great! Your subjects are ${subjectList}. Which one do you want to quiz on?`;
+        await speakText(speakMsg);
     }
 }
 
