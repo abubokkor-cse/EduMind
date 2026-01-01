@@ -190,9 +190,11 @@
 
             <!-- Magic Quiz Overlay - Shows on left side like magic image -->
             <div id="magic-quiz-overlay" class="magic-quiz-overlay hidden">
-                <div class="magic-quiz-frame">
-                    <div class="magic-glow"></div>
-                    <div class="quiz-overlay-content">
+                <div class="magic-quiz-frame glass-container">
+                    <div class="glass-filter"></div>
+                    <div class="glass-overlay"></div>
+                    <div class="glass-specular"></div>
+                    <div class="glass-content quiz-overlay-content">
                         <!-- Quiz Header -->
                         <div class="quiz-overlay-header">
                             <div class="quiz-overlay-title">
@@ -228,17 +230,16 @@
                             <button id="quiz-overlay-next" class="quiz-nav-btn">Next →</button>
                         </div>
                     </div>
-                    <div class="magic-sparkles">
-                        <span>✨</span><span>✨</span><span>✨</span><span>✨</span>
-                    </div>
                 </div>
             </div>
 
             <!-- Quiz Results Overlay -->
             <div id="quiz-results-overlay" class="magic-quiz-overlay hidden">
-                <div class="magic-quiz-frame results-frame">
-                    <div class="magic-glow"></div>
-                    <div class="quiz-results-content">
+                <div class="magic-quiz-frame results-frame glass-container">
+                    <div class="glass-filter"></div>
+                    <div class="glass-overlay"></div>
+                    <div class="glass-specular"></div>
+                    <div class="glass-content quiz-results-content">
                         <h2>📊 Quiz Complete!</h2>
                         <div class="results-score-big">
                             <span id="results-score-percent">0%</span>
@@ -255,9 +256,6 @@
                             <button id="quiz-review-btn" class="btn secondary">📋 Review</button>
                             <button id="quiz-close-btn" class="btn primary">✓ Done</button>
                         </div>
-                    </div>
-                    <div class="magic-sparkles">
-                        <span>🎉</span><span>⭐</span><span>🏆</span><span>✨</span>
                     </div>
                 </div>
             </div>
