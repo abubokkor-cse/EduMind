@@ -499,6 +499,7 @@ body {
     display: flex;
     flex: 1 1 auto;
     align-items: center;
+    width: 100%;
 }
 
 /* ===================================
@@ -4011,7 +4012,9 @@ html.user-logged-in #user-btn {
 .sidebar-content {
     display: flex;
     flex-direction: column;
+    align-items: stretch;
     height: 100%;
+    width: 100%;
     padding: 16px;
     gap: 12px;
 }
@@ -4020,6 +4023,7 @@ html.user-logged-in #user-btn {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    width: 100%;
     padding-bottom: 12px;
     border-bottom: 1px solid rgba(0, 0, 0, 0.15);
 }
