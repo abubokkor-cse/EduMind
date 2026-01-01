@@ -2388,18 +2388,34 @@ async function switchTeacher(teacherType) {
         return;
     }
 
+    // Prevent switching to the same teacher
+    if (CONFIG.currentTeacher === teacherType) {
+        console.log("Already using this teacher");
+        return;
+    }
+
     const teacherConfig = CONFIG.teacherAvatars[teacherType];
-    CONFIG.currentTeacher = teacherType;
-    CONFIG.avatarUrl = teacherConfig.url;
 
     console.log(`🔄 Switching to ${teacherConfig.name} teacher...`);
 
-
     elements.loading.classList.remove("hidden");
     elements.loadingText.textContent = `Loading ${teacherConfig.name} teacher...`;
+    if (elements.loadingProgress) {
+        elements.loadingProgress.style.width = "0%";
+    }
 
     try {
-        // Load new avatar
+        // Stop any ongoing speech/animation
+        if (head) {
+            head.stop();
+        }
+
+        // Update config BEFORE loading
+        CONFIG.currentTeacher = teacherType;
+        CONFIG.avatarUrl = teacherConfig.url;
+        CONFIG.tts.elevenLabsVoice = teacherConfig.elevenLabsVoice;
+
+        // Use showAvatar - now preserves scene objects (lights, classroom)
         await head.showAvatar({
             url: teacherConfig.url,
             body: teacherConfig.body,
@@ -2415,38 +2431,68 @@ async function switchTeacher(teacherType) {
             avatarSpeakingHeadMove: 0.6
         }, (event) => {
             if (event.lengthComputable) {
-                const progress = Math.round((event.loaded / event.total) * 100);
+                const percent = Math.round((event.loaded / event.total) * 100);
                 if (elements.loadingProgress) {
-                    elements.loadingProgress.style.width = `${progress}%`;
+                    elements.loadingProgress.style.width = `${percent}%`;
                 }
                 if (elements.loadingText) {
-                    elements.loadingText.textContent = `Loading ${teacherConfig.name}... ${progress}%`;
+                    elements.loadingText.textContent = `Loading ${teacherConfig.name}... ${percent}%`;
                 }
             }
         });
 
-
-        CONFIG.tts.elevenLabsVoice = teacherConfig.elevenLabsVoice;
-
-
-        // This ensures both male and female teacher appear in the same position
+        // Position the new avatar in the classroom
         if (head.armature) {
+            // Find the gltf.scene parent container
+            let avatarContainer = head.armature;
+            while (avatarContainer.parent && avatarContainer.parent !== head.scene) {
+                avatarContainer = avatarContainer.parent;
+            }
+
+            // Reset container to origin (important!)
+            avatarContainer.position.set(0, 0, 0);
+            avatarContainer.scale.set(1, 1, 1);
+            avatarContainer.rotation.set(0, 0, 0);
+
+            // Position the armature directly (like loadClassroomBackground does)
             head.armature.position.set(0.1, -6.7, -5);
             head.armature.scale.set(1.5, 1.5, 1.5);
-            head.armature.rotation.y = THREE.MathUtils.degToRad(0);  // Face forward to students
-            console.log(`👩‍🏫 ${teacherConfig.name} positioned at:`, head.armature.position.toArray());
+            head.armature.rotation.y = THREE.MathUtils.degToRad(0);
+
+            // Ensure all meshes are visible and have proper materials
+            avatarContainer.traverse((child) => {
+                child.visible = true;
+                child.frustumCulled = false;
+                if (child.isMesh || child.isSkinnedMesh) {
+                    if (child.material) {
+                        child.material.needsUpdate = true;
+                    }
+                }
+            });
+
+            // Force skeleton and skinned mesh update
+            avatarContainer.traverse((child) => {
+                if (child.isSkinnedMesh) {
+                    child.skeleton?.update();
+                    child.updateMatrixWorld(true);
+                }
+                if (child.isBone) {
+                    child.updateMatrixWorld(true);
+                }
+            });
+
+            // Force a scene update
+            head.scene.updateMatrixWorld(true);
         }
 
-
+        // Save preference
         localStorage.setItem('edumind_teacher_preference', teacherType);
-
 
         elements.loading.classList.add("hidden");
 
         // Greet with the new teacher
-        const teacherName = teacherConfig.name;
-        const teacherTitle = teacherConfig.title;
-        addMessageToChat(`👋 Hello! I'm ${teacherTitle} ${teacherName}, your new teacher. How can I help you today?`, "teacher");
+        const greetingName = `${teacherConfig.title} ${teacherConfig.name}`;
+        addMessageToChat(`👋 Hello! I'm ${greetingName}, your new teacher. How can I help you today?`, "teacher");
 
         // Teacher greeting animation
         if (head) {
