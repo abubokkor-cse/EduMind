@@ -637,9 +637,33 @@ export async function updateChatHistory(chatId, messages) {
     }
 }
 
-// Load recent chat history list (for sidebar)
+// Load recent chat history list (for sidebar) - with offline cache
 export async function loadChatHistory(limitCount = 50) {
-    if (!currentUser) return [];
+    const CACHE_KEY = 'edumind_chat_history_cache';
+
+    // Try to load from cache first (for immediate display)
+    let cachedChats = [];
+    try {
+        const cached = localStorage.getItem(CACHE_KEY);
+        if (cached) {
+            cachedChats = JSON.parse(cached);
+            console.log("📦 Loaded", cachedChats.length, "chats from cache");
+        }
+    } catch (e) {
+        console.warn("Cache read error:", e);
+    }
+
+    // If not logged in, return cached data
+    if (!currentUser) {
+        console.log("👤 No user, returning cached chats");
+        return cachedChats;
+    }
+
+    // Check if online
+    if (!navigator.onLine) {
+        console.log("📴 Offline - using cached chat history");
+        return cachedChats;
+    }
 
     try {
         // Query chats ordered by createdAt (no composite index needed)
@@ -665,18 +689,51 @@ export async function loadChatHistory(limitCount = 50) {
             });
         });
 
-        console.log("✅ Loaded", chats.length, "chat sessions");
+        console.log("✅ Loaded", chats.length, "chat sessions from Firebase");
+
+        // Cache to localStorage for offline access
+        try {
+            localStorage.setItem(CACHE_KEY, JSON.stringify(chats));
+            console.log("💾 Chat history cached for offline");
+        } catch (e) {
+            console.warn("Cache write error:", e);
+        }
+
         return chats;
     } catch (error) {
         console.error("❌ Chat load error:", error);
-        return [];
+        // Return cached data on error
+        console.log("📦 Returning cached chats due to error");
+        return cachedChats;
     }
 }
 
-// Load single chat with full messages
+// Load single chat with full messages - with offline cache
 export async function loadChat(chatId) {
-    if (!currentUser) return null;
+    const CACHE_KEY = `edumind_chat_${chatId}`;
+
+    // Try to load from cache first
+    let cachedChat = null;
+    try {
+        const cached = localStorage.getItem(CACHE_KEY);
+        if (cached) {
+            cachedChat = JSON.parse(cached);
+            console.log("📦 Loaded chat from cache:", chatId);
+        }
+    } catch (e) {
+        console.warn("Cache read error:", e);
+    }
+
+    if (!currentUser) {
+        return cachedChat;
+    }
     if (!chatId) return null;
+
+    // Check if online
+    if (!navigator.onLine) {
+        console.log("📴 Offline - using cached chat");
+        return cachedChat;
+    }
 
     try {
         const chatRef = doc(db, "chatHistory", chatId);
@@ -691,20 +748,32 @@ export async function loadChat(chatId) {
                 return null;
             }
 
-            console.log("✅ Loaded chat:", chatId);
-            return {
+            const chat = {
                 id: chatSnap.id,
                 ...data,
                 createdAt: data.createdAt?.toDate?.() || new Date(data.createdAt),
                 updatedAt: data.updatedAt?.toDate?.() || new Date(data.updatedAt)
             };
+
+            console.log("✅ Loaded chat from Firebase:", chatId);
+
+            // Cache for offline access
+            try {
+                localStorage.setItem(CACHE_KEY, JSON.stringify(chat));
+                console.log("💾 Chat cached for offline:", chatId);
+            } catch (e) {
+                console.warn("Cache write error:", e);
+            }
+
+            return chat;
         } else {
             console.warn("⚠️ Chat not found:", chatId);
-            return null;
+            return cachedChat; // Return cached if available
         }
     } catch (error) {
         console.error("❌ Chat load error:", error);
-        return null;
+        // Return cached data on error
+        return cachedChat;
     }
 }
 
@@ -806,13 +875,45 @@ export async function saveStudentProfileToFirestore(profileData) {
     }
 
     try {
-        // Save to studentProfiles collection with userId as document ID
-        await setDoc(doc(db, "studentProfiles", currentUser.uid), {
-            ...profileData,
+        // Build clean profile - only include relevant fields based on type
+        const isUniversity = profileData.type === 'university' ||
+            profileData.educationLevel === 'undergraduate' ||
+            profileData.educationLevel === 'postgraduate' ||
+            profileData.educationLevel === 'doctoral';
+
+        const cleanProfile = {
+            id: profileData.id,
             userId: currentUser.uid,
             email: currentUser.email,
+            displayName: profileData.displayName,
+            country: profileData.country,
+            countryName: profileData.countryName,
+            educationLevel: profileData.educationLevel,
+            type: isUniversity ? 'university' : 'school',
+            language: profileData.language || 'en-US',
+            subjects: profileData.subjects || [],
+            createdAt: profileData.createdAt,
             updatedAt: new Date()
-        });
+        };
+
+        // Add type-specific fields only
+        if (isUniversity) {
+            cleanProfile.department = profileData.department;
+            cleanProfile.program = profileData.program;
+            cleanProfile.programName = profileData.programName;
+            cleanProfile.year = profileData.year;
+            // Explicitly NOT including: board, class, stream
+        } else {
+            cleanProfile.board = profileData.board;
+            cleanProfile.class = profileData.class;
+            cleanProfile.stream = profileData.stream;
+            // Explicitly NOT including: department, program, programName, year
+        }
+
+        console.log("📝 Saving clean profile to Firestore:", cleanProfile);
+
+        // setDoc without merge option replaces the entire document
+        await setDoc(doc(db, "studentProfiles", currentUser.uid), cleanProfile);
 
         console.log("✅ Student profile saved to Firestore:", currentUser.uid);
         return { success: true };
@@ -859,6 +960,7 @@ export function showUserProfile() {
     const loginForm = document.getElementById('login-form');
     const signupForm = document.getElementById('signup-form');
     const userProfileDiv = document.getElementById('user-profile');
+    const userBtn = document.getElementById('user-btn');
 
     // Show auth modal with profile
     if (authModal) authModal.classList.remove('hidden');
@@ -891,10 +993,20 @@ export function showUserProfile() {
 
         // Set grade/education info from student profile
         if (profileGrade && studentProfile) {
-            if (studentProfile.type === 'university') {
-                profileGrade.textContent = `${studentProfile.programName || studentProfile.department || 'University'} - Year ${studentProfile.year || 1}`;
+            const isUniversity = studentProfile.type === 'university' ||
+                studentProfile.educationLevel === 'undergraduate' ||
+                studentProfile.educationLevel === 'postgraduate' ||
+                studentProfile.educationLevel === 'doctoral';
+
+            if (isUniversity) {
+                // Show program code (CSE, EEE, etc.) or department name
+                const programDisplay = studentProfile.programName ||
+                    (studentProfile.program ? studentProfile.program.toUpperCase() : '') ||
+                    studentProfile.department ||
+                    'University';
+                profileGrade.textContent = `${programDisplay} - Year ${studentProfile.year || 1}`;
             } else {
-                profileGrade.textContent = `Class ${studentProfile.class || 10} - ${studentProfile.stream || 'Science'}`;
+                profileGrade.textContent = `Class ${studentProfile.class || 10} - ${(studentProfile.stream || 'Science').charAt(0).toUpperCase() + (studentProfile.stream || 'science').slice(1)}`;
             }
         }
 
@@ -947,10 +1059,19 @@ export function showUserProfile() {
             if (profileEmail) profileEmail.textContent = studentProfile.email || 'Local profile (not synced)';
 
             if (profileGrade) {
-                if (studentProfile.type === 'university') {
-                    profileGrade.textContent = `${studentProfile.programName || studentProfile.department || 'University'} - Year ${studentProfile.year || 1}`;
+                const isUniversity = studentProfile.type === 'university' ||
+                    studentProfile.educationLevel === 'undergraduate' ||
+                    studentProfile.educationLevel === 'postgraduate' ||
+                    studentProfile.educationLevel === 'doctoral';
+
+                if (isUniversity) {
+                    const programDisplay = studentProfile.programName ||
+                        (studentProfile.program ? studentProfile.program.toUpperCase() : '') ||
+                        studentProfile.department ||
+                        'University';
+                    profileGrade.textContent = `${programDisplay} - Year ${studentProfile.year || 1}`;
                 } else {
-                    profileGrade.textContent = `Class ${studentProfile.class || 10} - ${studentProfile.stream || 'Science'}`;
+                    profileGrade.textContent = `Class ${studentProfile.class || 10} - ${(studentProfile.stream || 'Science').charAt(0).toUpperCase() + (studentProfile.stream || 'science').slice(1)}`;
                 }
             }
 
@@ -1001,14 +1122,24 @@ export async function getTextbooks(filters = {}) {
         let q;
 
         // Build query based on filters
-        if (filters.classNum && filters.stream) {
+        if (filters.department && filters.program) {
+            // University query
+            q = query(textbooksRef,
+                where('type', '==', 'university'),
+                where('department', '==', filters.department),
+                where('program', '==', filters.program)
+            );
+        } else if (filters.classNum && filters.stream) {
+            // School query with stream
             q = query(textbooksRef,
                 where('class', '==', parseInt(filters.classNum)),
                 where('stream', 'in', [filters.stream, '', null])
             );
         } else if (filters.classNum) {
+            // School query without stream
             q = query(textbooksRef, where('class', '==', parseInt(filters.classNum)));
         } else {
+            // Get all (limited)
             q = query(textbooksRef, limit(50));
         }
 
@@ -1043,11 +1174,36 @@ export async function checkTextbookExists(classNum, subject, board = 'NCTB') {
     }
 }
 
+// Check if university textbook already exists
+export async function checkUniversityTextbookExists(department, program, subject) {
+    try {
+        const textbooksRef = collection(db, 'textbooks');
+        const q = query(textbooksRef,
+            where('type', '==', 'university'),
+            where('department', '==', department),
+            where('program', '==', program),
+            where('subject', '==', subject.toLowerCase())
+        );
+
+        const snapshot = await getDocs(q);
+        return !snapshot.empty;
+    } catch (error) {
+        console.error("Error checking university textbook:", error);
+        return false;
+    }
+}
+
 // Upload textbook to Firebase Storage and create Firestore entry
 export async function uploadTextbook(file, metadata, onProgress) {
     try {
         const user = currentUser;
-        const fileName = `textbooks/class-${metadata.class}/${metadata.subject}-${Date.now()}.pdf`;
+        const isUniversity = metadata.type === 'university';
+
+        // Different file path for university vs school
+        const fileName = isUniversity
+            ? `textbooks/university/${metadata.department}/${metadata.program}/${metadata.subject}-${Date.now()}.pdf`
+            : `textbooks/class-${metadata.class}/${metadata.subject}-${Date.now()}.pdf`;
+
         const storageRef = ref(storage, fileName);
 
         // Upload file
@@ -1056,24 +1212,46 @@ export async function uploadTextbook(file, metadata, onProgress) {
         // Get download URL
         const downloadUrl = await getDownloadURL(storageRef);
 
-        // Create Firestore document
-        const textbookData = {
-            title: metadata.title,
-            subject: metadata.subject.toLowerCase(),
-            class: parseInt(metadata.class),
-            stream: metadata.stream || '',
-            board: metadata.board || 'NCTB',
-            country: metadata.country || 'bangladesh',
-            fileName: file.name,
-            fileSize: file.size,
-            pdfUrl: downloadUrl,
-            storagePath: fileName,
-            uploadedBy: user?.uid || 'anonymous',
-            uploadedAt: new Date().toISOString(),
-            verified: false,
-            chaptersCount: 0,
-            chaptersExtracted: false
-        };
+        // Create Firestore document - different structure for university
+        let textbookData;
+
+        if (isUniversity) {
+            textbookData = {
+                title: metadata.title,
+                subject: metadata.subject.toLowerCase(),
+                type: 'university',
+                department: metadata.department,
+                program: metadata.program,
+                country: metadata.country || 'bangladesh',
+                fileName: file.name,
+                fileSize: file.size,
+                pdfUrl: downloadUrl,
+                storagePath: fileName,
+                uploadedBy: user?.uid || 'anonymous',
+                uploadedAt: new Date().toISOString(),
+                verified: false,
+                chaptersCount: 0,
+                chaptersExtracted: false
+            };
+        } else {
+            textbookData = {
+                title: metadata.title,
+                subject: metadata.subject.toLowerCase(),
+                class: parseInt(metadata.class),
+                stream: metadata.stream || '',
+                board: metadata.board || 'NCTB',
+                country: metadata.country || 'bangladesh',
+                fileName: file.name,
+                fileSize: file.size,
+                pdfUrl: downloadUrl,
+                storagePath: fileName,
+                uploadedBy: user?.uid || 'anonymous',
+                uploadedAt: new Date().toISOString(),
+                verified: false,
+                chaptersCount: 0,
+                chaptersExtracted: false
+            };
+        }
 
         const docRef = await addDoc(collection(db, 'textbooks'), textbookData);
 

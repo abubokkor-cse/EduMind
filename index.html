@@ -60,6 +60,13 @@
             <feGaussianBlur in="alpha" stdDeviation="50" result="blur" />
             <feDisplacementMap in="SourceGraphic" in2="blur" scale="50" xChannelSelector="A" yChannelSelector="A" />
         </filter>
+        <!-- Gradient for Quiz Score Circle -->
+        <defs>
+            <linearGradient id="scoreGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" style="stop-color:#9333ea;stop-opacity:1" />
+                <stop offset="100%" style="stop-color:#22c55e;stop-opacity:1" />
+            </linearGradient>
+        </defs>
     </svg>
 
     <!-- Login/Signup Modal - hidden by default, user clicks Login button to show -->
@@ -181,6 +188,80 @@
                 </div>
             </div>
 
+            <!-- Magic Quiz Overlay - Shows on left side like magic image -->
+            <div id="magic-quiz-overlay" class="magic-quiz-overlay hidden">
+                <div class="magic-quiz-frame">
+                    <div class="magic-glow"></div>
+                    <div class="quiz-overlay-content">
+                        <!-- Quiz Header -->
+                        <div class="quiz-overlay-header">
+                            <div class="quiz-overlay-title">
+                                <span class="quiz-icon">📝</span>
+                                <div>
+                                    <h3 id="quiz-overlay-subject">Quiz</h3>
+                                    <p id="quiz-overlay-topic">Topic</p>
+                                </div>
+                            </div>
+                            <div class="quiz-overlay-stats">
+                                <span class="quiz-overlay-progress"><span id="quiz-overlay-current">1</span>/<span
+                                        id="quiz-overlay-total">10</span></span>
+                                <span class="quiz-overlay-score">🎯 <span id="quiz-overlay-score">0</span></span>
+                            </div>
+                            <button id="close-quiz-overlay" class="quiz-overlay-close">✕</button>
+                        </div>
+
+                        <!-- Quiz Question Area -->
+                        <div class="quiz-overlay-question-area">
+                            <div class="quiz-overlay-question-number" id="quiz-overlay-q-num">Question 1</div>
+                            <div class="quiz-overlay-question-text" id="quiz-overlay-q-text">Loading question...</div>
+                        </div>
+
+                        <!-- Quiz Options -->
+                        <div class="quiz-overlay-options" id="quiz-overlay-options">
+                            <!-- Options will be rendered here -->
+                        </div>
+
+                        <!-- Quiz Navigation -->
+                        <div class="quiz-overlay-nav">
+                            <button id="quiz-overlay-prev" class="quiz-nav-btn" disabled>← Prev</button>
+                            <div class="quiz-overlay-dots" id="quiz-overlay-dots"></div>
+                            <button id="quiz-overlay-next" class="quiz-nav-btn">Next →</button>
+                        </div>
+                    </div>
+                    <div class="magic-sparkles">
+                        <span>✨</span><span>✨</span><span>✨</span><span>✨</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quiz Results Overlay -->
+            <div id="quiz-results-overlay" class="magic-quiz-overlay hidden">
+                <div class="magic-quiz-frame results-frame">
+                    <div class="magic-glow"></div>
+                    <div class="quiz-results-content">
+                        <h2>📊 Quiz Complete!</h2>
+                        <div class="results-score-big">
+                            <span id="results-score-percent">0%</span>
+                            <span id="results-grade-letter">F</span>
+                        </div>
+                        <div class="results-details">
+                            <div class="result-stat"><span>✅</span> <span id="results-correct-count">0</span> Correct
+                            </div>
+                            <div class="result-stat"><span>❌</span> <span id="results-wrong-count">0</span> Wrong</div>
+                            <div class="result-stat"><span>⏱️</span> <span id="results-time-taken">0:00</span></div>
+                        </div>
+                        <p id="results-message-text" class="results-message">Great job!</p>
+                        <div class="results-actions">
+                            <button id="quiz-review-btn" class="btn secondary">📋 Review</button>
+                            <button id="quiz-close-btn" class="btn primary">✓ Done</button>
+                        </div>
+                    </div>
+                    <div class="magic-sparkles">
+                        <span>🎉</span><span>⭐</span><span>🏆</span><span>✨</span>
+                    </div>
+                </div>
+            </div>
+
             <!-- Avatar Loading State -->
             <div id="avatar-loading" class="avatar-loading">
                 <div class="loading-spinner"></div>
@@ -218,7 +299,6 @@
                         </div>
                         <button id="library-btn" class="glass-btn" title="Textbook Library">
                             <span class="btn-icon">📚</span>
-                            <span class="btn-text">Library</span>
                         </button>
                         <button id="credits-btn" class="glass-btn" title="Credits & Subscription">
                             <span class="btn-icon">💎</span>
@@ -791,6 +871,158 @@
                                 <div class="loading-spinner"></div>
                                 <span>Loading chapters...</span>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quiz Modal -->
+        <div id="quiz-modal" class="modal hidden">
+            <div class="modal-backdrop"></div>
+            <div class="glass-container modal-container quiz-modal-container">
+                <div class="glass-filter"></div>
+                <div class="glass-overlay"></div>
+                <div class="glass-specular"></div>
+                <div class="glass-content modal-content">
+                    <!-- Quiz Setup Screen -->
+                    <div id="quiz-setup" class="quiz-screen">
+                        <div class="quiz-header">
+                            <h2>📝 Quiz Time!</h2>
+                            <button id="close-quiz" class="close-btn">✕</button>
+                        </div>
+                        <div class="quiz-setup-body">
+                            <div class="quiz-subject-display">
+                                <span class="quiz-icon">🎯</span>
+                                <h3 id="quiz-subject-title">Mathematics</h3>
+                                <p id="quiz-topic-title">Algebra Basics</p>
+                            </div>
+                            <div class="quiz-count-selector">
+                                <label>How many questions?</label>
+                                <div class="count-options">
+                                    <button class="count-btn" data-count="5">5</button>
+                                    <button class="count-btn active" data-count="10">10</button>
+                                    <button class="count-btn" data-count="15">15</button>
+                                    <button class="count-btn" data-count="20">20</button>
+                                </div>
+                            </div>
+                            <div class="quiz-difficulty-selector">
+                                <label>Difficulty Level</label>
+                                <div class="difficulty-options">
+                                    <button class="difficulty-btn" data-difficulty="easy">
+                                        <span>😊</span> Easy
+                                    </button>
+                                    <button class="difficulty-btn active" data-difficulty="medium">
+                                        <span>🤔</span> Medium
+                                    </button>
+                                    <button class="difficulty-btn" data-difficulty="hard">
+                                        <span>🔥</span> Hard
+                                    </button>
+                                </div>
+                            </div>
+                            <button id="start-quiz-btn" class="btn primary quiz-start-btn">
+                                <span>🚀</span> Start Quiz
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Quiz Loading Screen -->
+                    <div id="quiz-loading" class="quiz-screen hidden">
+                        <div class="quiz-loading-content">
+                            <div class="quiz-loader"></div>
+                            <h3>Generating Questions...</h3>
+                            <p>Your AI teacher is preparing the quiz</p>
+                        </div>
+                    </div>
+
+                    <!-- Quiz Questions Screen -->
+                    <div id="quiz-questions" class="quiz-screen hidden">
+                        <div class="quiz-header">
+                            <div class="quiz-progress-info">
+                                <span id="quiz-current-num">1</span>/<span id="quiz-total-num">10</span>
+                            </div>
+                            <div class="quiz-score-display">
+                                <span>🎯</span>
+                                <span id="quiz-score">0</span>
+                            </div>
+                            <button id="close-quiz-questions" class="close-btn">✕</button>
+                        </div>
+                        <div class="quiz-progress-bar">
+                            <div id="quiz-progress-fill" class="quiz-progress-fill"></div>
+                        </div>
+
+                        <!-- Questions Container with Scroll -->
+                        <div class="quiz-questions-wrapper">
+                            <div id="quiz-questions-container" class="quiz-questions-container">
+                                <!-- Questions will be rendered here -->
+                            </div>
+                        </div>
+
+                        <!-- Navigation Dots -->
+                        <div id="quiz-nav-dots" class="quiz-nav-dots">
+                            <!-- Dots will be rendered here -->
+                        </div>
+                    </div>
+
+                    <!-- Quiz Results Screen -->
+                    <div id="quiz-results" class="quiz-screen hidden">
+                        <div class="quiz-header">
+                            <h2>📊 Quiz Results</h2>
+                            <button id="close-quiz-results" class="close-btn">✕</button>
+                        </div>
+                        <div class="quiz-results-body">
+                            <div class="results-score-circle">
+                                <svg viewBox="0 0 100 100">
+                                    <circle class="score-bg" cx="50" cy="50" r="45" />
+                                    <circle id="score-circle" class="score-fill" cx="50" cy="50" r="45" />
+                                </svg>
+                                <div class="score-text">
+                                    <span id="results-percentage">0%</span>
+                                    <span id="results-grade">F</span>
+                                </div>
+                            </div>
+                            <div class="results-stats">
+                                <div class="stat-item correct">
+                                    <span class="stat-icon">✅</span>
+                                    <span id="results-correct">0</span>
+                                    <span class="stat-label">Correct</span>
+                                </div>
+                                <div class="stat-item wrong">
+                                    <span class="stat-icon">❌</span>
+                                    <span id="results-wrong">0</span>
+                                    <span class="stat-label">Wrong</span>
+                                </div>
+                                <div class="stat-item time">
+                                    <span class="stat-icon">⏱️</span>
+                                    <span id="results-time">0:00</span>
+                                    <span class="stat-label">Time</span>
+                                </div>
+                            </div>
+                            <p id="results-message" class="results-message">Great job!</p>
+                            <div class="results-actions">
+                                <button id="review-quiz-btn" class="btn secondary">
+                                    <span>📋</span> Review Answers
+                                </button>
+                                <button id="retry-quiz-btn" class="btn primary">
+                                    <span>🔄</span> Try Again
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Quiz Review Screen -->
+                    <div id="quiz-review" class="quiz-screen hidden">
+                        <div class="quiz-header">
+                            <h2>📋 Review Answers</h2>
+                            <button id="close-quiz-review" class="close-btn">✕</button>
+                        </div>
+                        <div id="quiz-review-container" class="quiz-review-container">
+                            <!-- Review items will be rendered here -->
+                        </div>
+                        <div class="review-actions">
+                            <button id="back-to-results-btn" class="btn primary">
+                                <span>←</span> Back to Results
+                            </button>
                         </div>
                     </div>
                 </div>

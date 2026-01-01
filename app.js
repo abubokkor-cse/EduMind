@@ -47,6 +47,7 @@ import {
     // Textbook Library functions
     getTextbooks,
     checkTextbookExists,
+    checkUniversityTextbookExists,
     uploadTextbook,
     saveTextbookChapters,
     getTextbookChapters,
@@ -1352,17 +1353,19 @@ function showGreeting() {
 
         if (isUniversity) {
             const yearText = studentProfile.year ? `${studentProfile.year}${getOrdinalSuffix(studentProfile.year)} year` : '';
-            greeting = `Hey there! 😊 So good to see you! I'm ${teacherName}, your ${studentProfile.programCode || studentProfile.programName || 'university'} teacher. ${yearText ? `${yearText} already - time flies!` : ''} What are we learning today? I'm ready to help with ${studentProfile.subjects?.slice(0, 3).join(', ') || 'your subjects'} or anything else you need! Let's make it a great session! 📚✨`;
-        } else if (studentProfile.class && studentProfile.board) {
-            // School student with complete profile
-            greeting = `Hey there! 😊 Welcome back! I'm ${teacherName}, your Class ${studentProfile.class} ${studentProfile.stream || ''} teacher from ${studentProfile.board || studentProfile.countryName || 'your school'}. What would you like to learn today? I'm super excited to help you out! Let's do this! 📚✨`;
+            const programDisplay = studentProfile.programCode || studentProfile.programName || studentProfile.program?.toUpperCase() || 'university';
+            greeting = `Hey there! 😊 So good to see you! I'm ${teacherName}, your ${programDisplay} teacher. ${yearText ? `${yearText} already - time flies!` : ''} What are we learning today?`;
+        } else if (studentProfile.class) {
+            // School student with class info
+            const streamText = studentProfile.stream ? ` ${studentProfile.stream}` : '';
+            greeting = `Hey there! 😊 Welcome back! I'm ${teacherName}, your Class ${studentProfile.class}${streamText} teacher. What would you like to learn today?`;
         } else {
-
-            const name = studentProfile.displayName || studentProfile.name || '';
-            greeting = `Hey there${name ? `, ${name}` : ''}! 😊 I'm ${teacherName}, your friendly virtual teacher! I'm here to help you learn, grow, and succeed. What would you like to explore today? Let's make learning fun together! 📚✨`;
+            // Minimal fallback - just ask what to learn
+            greeting = `Hey there! 😊 I'm ${teacherName}. What would you like to learn today?`;
         }
     } else {
-        greeting = `Hey there! 😊 I'm ${teacherName}, your friendly virtual teacher! I'm here to help you learn, grow, and succeed. What would you like to explore today? Let's make learning fun together! 📚✨`;
+        // No profile - minimal greeting
+        greeting = `Hey there! 😊 I'm ${teacherName}. What would you like to learn today?`;
     }
 
 
@@ -1578,9 +1581,14 @@ function showOnboarding() {
 }
 
 function setupOnboardingSteps() {
-    let currentStep = 0;
+    const onboardingModal = document.getElementById('onboarding-modal');
+
+    // Use data attribute to store current step (persists across function calls)
+    let currentStep = parseInt(onboardingModal?.dataset.currentStep || '0');
     let selectedEducationLevel = null;
     let selectedDepartment = null;
+
+    // Note: isEditingProfile is checked dynamically in goToStep, not here
 
 
     const newStudentBtn = document.getElementById('new-student-btn');
@@ -1592,6 +1600,8 @@ function setupOnboardingSteps() {
     // New Student - proceed to onboarding steps
     newStudentBtn?.addEventListener('click', () => {
         console.log("🎓 New student selected - starting onboarding");
+        // Make sure edit mode is off for new students
+        onboardingModal.dataset.editMode = 'false';
         progressContainer?.classList.remove('hidden');
         goToStep(1);
     });
@@ -1752,13 +1762,62 @@ function setupOnboardingSteps() {
 
     // Helper function for step navigation
     function goToStep(step) {
+        // Check if editing profile dynamically (not from closure)
+        const isEditingProfile = onboardingModal?.dataset.editMode === 'true';
+
+        // If editing profile and trying to go to step 5, save profile instead
+        if (isEditingProfile && step === 5) {
+            saveEditedProfile();
+            return;
+        }
+
         document.querySelector(`.onboarding-step[data-step="${currentStep}"]`)?.classList.remove('active');
         currentStep = step;
+        // Store current step in data attribute for persistence
+        if (onboardingModal) {
+            onboardingModal.dataset.currentStep = step.toString();
+        }
         document.querySelector(`.onboarding-step[data-step="${currentStep}"]`)?.classList.add('active');
 
 
         if (step > 0) {
             updateProgressBar(currentStep);
+        }
+    }
+
+    // Save profile when editing (skip account creation)
+    async function saveEditedProfile() {
+        console.log("💾 Saving edited profile...");
+        const profile = collectOnboardingData(selectedEducationLevel, selectedDepartment);
+
+        if (profile) {
+            // Keep existing user info
+            const existingProfile = getStudentProfile();
+            if (existingProfile) {
+                profile.userId = existingProfile.userId;
+                profile.email = existingProfile.email;
+                profile.displayName = existingProfile.displayName;
+            }
+
+            await saveStudentProfile(profile);
+
+            // Reset edit mode flag
+            const modal = document.getElementById('onboarding-modal');
+            if (modal) {
+                modal.dataset.editMode = 'false';
+                modal.classList.add('hidden');
+            }
+
+            // Reset the button text back to "Continue"
+            const step4NextBtn = document.querySelector('.onboarding-step[data-step="4"] .onboarding-next');
+            if (step4NextBtn) {
+                step4NextBtn.textContent = 'Continue →';
+            }
+
+            addMessageToChat("✅ Profile updated successfully!", "system");
+            console.log("✅ Profile updated!");
+        } else {
+            alert("Please complete all profile selections");
         }
     }
 
@@ -1805,8 +1864,13 @@ function setupOnboardingSteps() {
 
     document.querySelectorAll('.onboarding-next').forEach(btn => {
         btn.addEventListener('click', () => {
-            goToStep(currentStep + 1);
+            console.log("🔵 Continue button clicked!");
+            // Read current step from data attribute for accurate tracking
+            const modal = document.getElementById('onboarding-modal');
+            currentStep = parseInt(modal?.dataset.currentStep || currentStep.toString());
+            console.log("🔵 Current step from data:", currentStep, "Going to:", currentStep + 1);
 
+            goToStep(currentStep + 1);
 
             if (currentStep === 3 && selectedEducationLevel) {
                 updateStep3ForLevel(selectedEducationLevel);
@@ -1816,6 +1880,11 @@ function setupOnboardingSteps() {
 
     document.querySelectorAll('.onboarding-back').forEach(btn => {
         btn.addEventListener('click', () => {
+            console.log("🔵 Back button clicked!");
+            // Read current step from data attribute for accurate tracking
+            const modal = document.getElementById('onboarding-modal');
+            currentStep = parseInt(modal?.dataset.currentStep || currentStep.toString());
+
             goToStep(currentStep - 1);
         });
     });
@@ -1926,19 +1995,31 @@ function setupOnboardingSteps() {
 
 
     document.getElementById('skip-onboarding')?.addEventListener('click', async () => {
+        console.log("🔵 Skip Setup button clicked!");
+        const modal = document.getElementById('onboarding-modal');
+        const isEditing = modal?.dataset.editMode === 'true';
+        console.log("🔵 Is editing mode:", isEditing);
 
-        await saveStudentProfile({
-            country: 'bangladesh',
-            countryName: 'Bangladesh',
-            board: 'NCTB',
-            educationLevel: 'secondary',
-            class: '10',
-            stream: 'science',
-            subjects: ['Physics', 'Chemistry', 'Mathematics', 'Biology', 'English', 'ICT'],
-            language: 'en-US'
-        });
-        document.getElementById('onboarding-modal')?.classList.add('hidden');
-        await greetStudent();
+        if (isEditing) {
+            // Just close the modal when editing - don't change profile
+            modal.dataset.editMode = 'false';
+            modal.classList.add('hidden');
+            addMessageToChat("✏️ Profile editing cancelled", "system");
+        } else {
+            // New user - save default profile
+            await saveStudentProfile({
+                country: 'bangladesh',
+                countryName: 'Bangladesh',
+                board: 'NCTB',
+                educationLevel: 'secondary',
+                class: '10',
+                stream: 'science',
+                subjects: ['Physics', 'Chemistry', 'Mathematics', 'Biology', 'English', 'ICT'],
+                language: 'en-US'
+            });
+            modal?.classList.add('hidden');
+            await greetStudent();
+        }
     });
 }
 
@@ -3026,23 +3107,324 @@ function setupEventListeners() {
         // Show onboarding modal (skip step 0, go directly to step 1)
         const onboardingModal = document.getElementById("onboarding-modal");
         if (onboardingModal) {
+            // Set edit mode flag and current step
+            onboardingModal.dataset.editMode = 'true';
+            onboardingModal.dataset.currentStep = '1'; // Start at step 1 for editing
             onboardingModal.classList.remove("hidden");
 
             // Hide step 0 (welcome) and show step 1 (country selection)
             document.querySelector('.onboarding-step[data-step="0"]')?.classList.remove('active');
             document.querySelector('.onboarding-step[data-step="1"]')?.classList.add('active');
 
-            // Show progress bar
+            // Show progress bar and update it
             document.getElementById('progress-container')?.classList.remove('hidden');
+            const progressBar = document.getElementById('onboarding-progress');
+            if (progressBar) progressBar.style.width = '20%';
+
+            // Update step 4's Continue button to say "Save Profile" when editing
+            const step4NextBtn = document.querySelector('.onboarding-step[data-step="4"] .onboarding-next');
+            if (step4NextBtn) {
+                step4NextBtn.textContent = 'Save Profile ✓';
+            }
+
+            // Re-render countries to ensure they're visible
+            const countryGrid = document.getElementById('country-grid');
+            if (countryGrid) {
+                countryGrid.innerHTML = COUNTRIES.map(c => `
+                    <button class="country-btn" data-country="${c.code}">
+                        <span class="country-flag">${c.flag}</span>
+                        <span class="country-name">${c.name}</span>
+                        <span class="country-board">${c.board}</span>
+                    </button>
+                `).join('');
+
+                countryGrid.querySelectorAll('.country-btn').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        countryGrid.querySelectorAll('.country-btn').forEach(b => b.classList.remove('selected'));
+                        btn.classList.add('selected');
+                    });
+                });
+            }
 
             // Pre-select current values if available
             const profile = getStudentProfile();
             if (profile) {
                 // Pre-select country
-                const countryBtn = document.querySelector(`.country-btn[data-country="${profile.country}"]`);
-                if (countryBtn) countryBtn.classList.add('selected');
+                setTimeout(() => {
+                    const countryBtn = document.querySelector(`.country-btn[data-country="${profile.country}"]`);
+                    if (countryBtn) countryBtn.classList.add('selected');
+                }, 100);
 
                 console.log("✏️ Editing profile for:", profile.email || profile.id);
+            }
+
+            // Re-attach event handlers for all Continue buttons in edit mode
+            const skipBtn = document.getElementById('skip-onboarding');
+
+            // Step 1 Continue
+            const step1Continue = document.querySelector('.onboarding-step[data-step="1"] .onboarding-next');
+            if (step1Continue) {
+                step1Continue.onclick = () => {
+                    console.log("✏️ Edit mode - Step 1 Continue, going to step 2");
+                    document.querySelector('.onboarding-step[data-step="1"]')?.classList.remove('active');
+                    document.querySelector('.onboarding-step[data-step="2"]')?.classList.add('active');
+                    onboardingModal.dataset.currentStep = '2';
+                    const progressBar = document.getElementById('onboarding-progress');
+                    if (progressBar) progressBar.style.width = '40%';
+                };
+            }
+
+            // Step 2 Continue & Back
+            const step2Continue = document.querySelector('.onboarding-step[data-step="2"] .onboarding-next');
+            const step2Back = document.querySelector('.onboarding-step[data-step="2"] .onboarding-back');
+            if (step2Continue) {
+                step2Continue.onclick = () => {
+                    console.log("✏️ Edit mode - Step 2 Continue, going to step 3");
+                    document.querySelector('.onboarding-step[data-step="2"]')?.classList.remove('active');
+                    document.querySelector('.onboarding-step[data-step="3"]')?.classList.add('active');
+                    onboardingModal.dataset.currentStep = '3';
+                    const progressBar = document.getElementById('onboarding-progress');
+                    if (progressBar) progressBar.style.width = '60%';
+
+                    // Populate class grid based on selected education level
+                    const selectedLevel = document.querySelector('.level-btn.selected')?.dataset.level || 'secondary';
+                    updateStep3ForLevel(selectedLevel);
+
+                    // Add click handlers for dynamically created buttons after a small delay
+                    setTimeout(() => {
+                        // Department buttons (for university levels)
+                        document.querySelectorAll('.dept-btn').forEach(btn => {
+                            btn.onclick = () => {
+                                document.querySelectorAll('.dept-btn').forEach(b => b.classList.remove('selected'));
+                                btn.classList.add('selected');
+                            };
+                        });
+                        // Class buttons (for school levels)
+                        document.querySelectorAll('.class-btn').forEach(btn => {
+                            btn.onclick = () => {
+                                document.querySelectorAll('.class-btn').forEach(b => b.classList.remove('selected'));
+                                btn.classList.add('selected');
+                            };
+                        });
+                    }, 50);
+                };
+            }
+            if (step2Back) {
+                step2Back.onclick = () => {
+                    document.querySelector('.onboarding-step[data-step="2"]')?.classList.remove('active');
+                    document.querySelector('.onboarding-step[data-step="1"]')?.classList.add('active');
+                    onboardingModal.dataset.currentStep = '1';
+                    const progressBar = document.getElementById('onboarding-progress');
+                    if (progressBar) progressBar.style.width = '20%';
+                };
+            }
+
+            // Step 3 Continue & Back
+            const step3Continue = document.querySelector('.onboarding-step[data-step="3"] .onboarding-next');
+            const step3Back = document.querySelector('.onboarding-step[data-step="3"] .onboarding-back');
+            if (step3Continue) {
+                step3Continue.onclick = () => {
+                    console.log("✏️ Edit mode - Step 3 Continue, going to step 4");
+
+                    // Get selected level to determine what step 4 shows
+                    const selectedLevel = document.querySelector('.level-btn.selected')?.dataset.level;
+                    const isUniversity = selectedLevel === 'undergraduate' || selectedLevel === 'postgraduate' || selectedLevel === 'doctoral';
+
+                    // Update step 4 based on level
+                    updateStep4ForLevel(selectedLevel);
+
+                    // If university, populate programs for selected department
+                    if (isUniversity) {
+                        const selectedDept = document.querySelector('.dept-btn.selected')?.dataset.dept;
+                        if (selectedDept) {
+                            updateProgramsForDepartment(selectedDept);
+                            // Re-add click handlers for the newly created buttons
+                            setTimeout(() => {
+                                document.querySelectorAll('.program-btn').forEach(btn => {
+                                    btn.onclick = () => {
+                                        document.querySelectorAll('.program-btn').forEach(b => b.classList.remove('selected'));
+                                        btn.classList.add('selected');
+                                    };
+                                });
+                                document.querySelectorAll('.year-btn').forEach(btn => {
+                                    btn.onclick = () => {
+                                        document.querySelectorAll('.year-btn').forEach(b => b.classList.remove('selected'));
+                                        btn.classList.add('selected');
+                                    };
+                                });
+                            }, 50);
+                        }
+                    } else {
+                        // For non-university, add stream button handlers
+                        setTimeout(() => {
+                            document.querySelectorAll('.stream-btn').forEach(btn => {
+                                btn.onclick = () => {
+                                    document.querySelectorAll('.stream-btn').forEach(b => b.classList.remove('selected'));
+                                    btn.classList.add('selected');
+                                };
+                            });
+                        }, 50);
+                    }
+
+                    document.querySelector('.onboarding-step[data-step="3"]')?.classList.remove('active');
+                    document.querySelector('.onboarding-step[data-step="4"]')?.classList.add('active');
+                    onboardingModal.dataset.currentStep = '4';
+                    const progressBar = document.getElementById('onboarding-progress');
+                    if (progressBar) progressBar.style.width = '80%';
+                };
+            }
+            if (step3Back) {
+                step3Back.onclick = () => {
+                    document.querySelector('.onboarding-step[data-step="3"]')?.classList.remove('active');
+                    document.querySelector('.onboarding-step[data-step="2"]')?.classList.add('active');
+                    onboardingModal.dataset.currentStep = '2';
+                    const progressBar = document.getElementById('onboarding-progress');
+                    if (progressBar) progressBar.style.width = '40%';
+                };
+            }
+
+            // Step 4 Save Profile & Back
+            const step4Save = document.querySelector('.onboarding-step[data-step="4"] .onboarding-next');
+            const step4Back = document.querySelector('.onboarding-step[data-step="4"] .onboarding-back');
+            if (step4Save) {
+                step4Save.onclick = async () => {
+                    console.log("✏️ Edit mode - Save Profile clicked");
+                    // Collect and save profile
+                    const selectedCountry = document.querySelector('.country-btn.selected')?.dataset.country || 'bangladesh';
+                    const selectedLevel = document.querySelector('.level-btn.selected')?.dataset.level || 'secondary';
+                    const selectedClass = document.querySelector('.class-btn.selected')?.dataset.class;
+                    const selectedStream = document.querySelector('.stream-btn.selected')?.dataset.stream;
+                    const selectedDept = document.querySelector('.dept-btn.selected')?.dataset.dept;
+                    const selectedProgram = document.querySelector('.program-btn.selected')?.dataset.program;
+                    const selectedYear = document.querySelector('.year-btn.selected')?.dataset.year;
+
+                    const isUniversity = selectedLevel === 'undergraduate' || selectedLevel === 'postgraduate' || selectedLevel === 'doctoral';
+
+                    // Get country info
+                    const countryBtn = document.querySelector('.country-btn.selected');
+                    const countryName = countryBtn?.querySelector('.country-name')?.textContent || 'Bangladesh';
+
+                    // Start with basic profile info (not spreading existing to avoid old fields)
+                    const existingProfile = getStudentProfile() || {};
+                    const updatedProfile = {
+                        id: existingProfile.id,
+                        email: existingProfile.email,
+                        displayName: existingProfile.displayName,
+                        userId: existingProfile.userId,
+                        createdAt: existingProfile.createdAt,
+                        country: selectedCountry,
+                        countryName: countryName,
+                        educationLevel: selectedLevel,
+                        type: isUniversity ? 'university' : 'school',
+                        language: existingProfile.language || 'en-US'
+                    };
+
+                    if (isUniversity) {
+                        // University student - save department, program, year
+                        updatedProfile.department = selectedDept;
+                        updatedProfile.program = selectedProgram;
+                        updatedProfile.year = selectedYear;
+                        // Get program name for display
+                        const programBtn = document.querySelector('.program-btn.selected');
+                        if (programBtn) {
+                            updatedProfile.programName = programBtn.querySelector('.program-name')?.textContent || selectedProgram;
+                        }
+                        // Don't include class, stream, board for university students
+                    } else {
+                        // School student (Class 1-12) - save class, stream, board
+                        updatedProfile.class = selectedClass || '10';
+                        updatedProfile.stream = selectedStream || 'science';
+                        // Get board from country data
+                        const boardText = countryBtn?.querySelector('.country-board')?.textContent || 'NCTB';
+                        updatedProfile.board = boardText;
+                        // Don't include department, program, year for school students
+                    }
+
+                    // Get subjects based on profile type
+                    if (isUniversity && selectedDept && selectedProgram) {
+                        const prog = getUniversityProgram(selectedDept, selectedProgram);
+                        updatedProfile.subjects = prog?.subjects || [];
+                    } else if (!isUniversity) {
+                        updatedProfile.subjects = getSubjectsForClass(selectedCountry, selectedClass || '10', selectedStream || 'science');
+                    }
+
+                    console.log("📝 Saving updated profile:", updatedProfile);
+                    await saveStudentProfile(updatedProfile);
+
+                    onboardingModal.dataset.editMode = 'false';
+                    onboardingModal.classList.add('hidden');
+
+                    // Re-show the user profile with updated data
+                    showUserProfile();
+
+                    addMessageToChat("✅ Profile updated successfully!", "system");
+                };
+            }
+            if (step4Back) {
+                step4Back.onclick = () => {
+                    document.querySelector('.onboarding-step[data-step="4"]')?.classList.remove('active');
+                    document.querySelector('.onboarding-step[data-step="3"]')?.classList.add('active');
+                    onboardingModal.dataset.currentStep = '3';
+                    const progressBar = document.getElementById('onboarding-progress');
+                    if (progressBar) progressBar.style.width = '60%';
+                };
+            }
+
+            // Add click handlers for level buttons
+            document.querySelectorAll('.level-btn').forEach(btn => {
+                btn.onclick = () => {
+                    document.querySelectorAll('.level-btn').forEach(b => b.classList.remove('selected'));
+                    btn.classList.add('selected');
+                };
+            });
+
+            // Add click handlers for class buttons
+            document.querySelectorAll('.class-btn').forEach(btn => {
+                btn.onclick = () => {
+                    document.querySelectorAll('.class-btn').forEach(b => b.classList.remove('selected'));
+                    btn.classList.add('selected');
+                };
+            });
+
+            // Add click handlers for department buttons
+            document.querySelectorAll('.dept-btn').forEach(btn => {
+                btn.onclick = () => {
+                    document.querySelectorAll('.dept-btn').forEach(b => b.classList.remove('selected'));
+                    btn.classList.add('selected');
+                };
+            });
+
+            // Add click handlers for program buttons
+            document.querySelectorAll('.program-btn').forEach(btn => {
+                btn.onclick = () => {
+                    document.querySelectorAll('.program-btn').forEach(b => b.classList.remove('selected'));
+                    btn.classList.add('selected');
+                };
+            });
+
+            // Add click handlers for year buttons
+            document.querySelectorAll('.year-btn').forEach(btn => {
+                btn.onclick = () => {
+                    document.querySelectorAll('.year-btn').forEach(b => b.classList.remove('selected'));
+                    btn.classList.add('selected');
+                };
+            });
+
+            // Add click handlers for stream buttons
+            document.querySelectorAll('.stream-btn').forEach(btn => {
+                btn.onclick = () => {
+                    document.querySelectorAll('.stream-btn').forEach(b => b.classList.remove('selected'));
+                    btn.classList.add('selected');
+                };
+            });
+
+            if (skipBtn) {
+                skipBtn.onclick = () => {
+                    console.log("✏️ Edit mode - Skip clicked, closing modal");
+                    onboardingModal.dataset.editMode = 'false';
+                    onboardingModal.classList.add('hidden');
+                    addMessageToChat("✏️ Profile editing cancelled", "system");
+                };
             }
         }
 
@@ -3884,11 +4266,30 @@ function updateLibraryStudentInfo() {
     const streamEl = document.getElementById('library-student-stream');
     const boardEl = document.getElementById('library-student-board');
 
-    if (studentProfile) {
-        if (classEl) classEl.textContent = `Class ${studentProfile.class || 10}`;
-        if (streamEl) streamEl.textContent = studentProfile.stream ?
-            studentProfile.stream.charAt(0).toUpperCase() + studentProfile.stream.slice(1) : 'Science';
-        if (boardEl) boardEl.textContent = studentProfile.board || 'NCTB';
+    const profile = getStudentProfile();
+    console.log("📚 Updating library info for profile:", profile);
+
+    if (profile) {
+        const isUniversity = profile.type === 'university' ||
+            profile.educationLevel === 'undergraduate' ||
+            profile.educationLevel === 'postgraduate' ||
+            profile.educationLevel === 'doctoral';
+
+        if (isUniversity) {
+            // University student - show program and year
+            const programDisplay = profile.programName ||
+                (profile.program ? profile.program.toUpperCase() : 'University');
+            if (classEl) classEl.textContent = programDisplay;
+            if (streamEl) streamEl.textContent = `Year ${profile.year || 1}`;
+            if (boardEl) boardEl.textContent = profile.department ?
+                profile.department.charAt(0).toUpperCase() + profile.department.slice(1) : '';
+        } else {
+            // School student - show class, stream, board
+            if (classEl) classEl.textContent = `Class ${profile.class || 10}`;
+            if (streamEl) streamEl.textContent = profile.stream ?
+                profile.stream.charAt(0).toUpperCase() + profile.stream.slice(1) : 'Science';
+            if (boardEl) boardEl.textContent = profile.board || 'NCTB';
+        }
     }
 }
 
@@ -3897,6 +4298,8 @@ async function loadLibraryBooks() {
     const grid = document.getElementById('library-books-grid');
     if (!grid) return;
 
+    // Get fresh profile
+    const profile = getStudentProfile();
 
     grid.innerHTML = `
         <div class="library-loading">
@@ -3905,68 +4308,112 @@ async function loadLibraryBooks() {
         </div>
     `;
 
+    const isUniversity = profile?.type === 'university' ||
+        profile?.educationLevel === 'undergraduate' ||
+        profile?.educationLevel === 'postgraduate' ||
+        profile?.educationLevel === 'doctoral';
 
-    const classNum = studentProfile?.class || 10;
-    const stream = studentProfile?.stream || 'science';
+    let textbooks = [];
 
-    // Get textbooks from Firebase
-    const textbooks = await getTextbooks({ classNum, stream });
-    libraryTextbooks = textbooks;
+    if (isUniversity) {
+        // University student - just get all uploaded books for their department/program
+        try {
+            textbooks = await getTextbooks({
+                department: profile?.department,
+                program: profile?.program
+            });
+        } catch (e) {
+            textbooks = [];
+        }
 
-
-    const expectedSubjects = STANDARD_SUBJECTS[stream] || STANDARD_SUBJECTS.general;
-
-
-    const availableBooks = new Map();
-    textbooks.forEach(book => {
-        availableBooks.set(book.subject, book);
-    });
-
-    // Render grid
-    if (currentLibraryTab === 'my-books') {
-
-        grid.innerHTML = expectedSubjects.map(subject => {
-            const book = availableBooks.get(subject);
-            const subjectInfo = SUBJECT_NAMES[subject] || SUBJECT_NAMES.other;
-
-            if (book) {
-                return `
-                    <div class="book-card available" data-book-id="${book.id}" onclick="openBook('${book.id}')">
-                        <span class="book-icon">${subjectInfo.icon}</span>
-                        <span class="book-title">${subjectInfo.bn}<br><small>${subjectInfo.en}</small></span>
-                        <span class="book-chapters">${book.chaptersCount || 0} chapters</span>
-                    </div>
-                `;
-            } else {
-                return `
-                    <div class="book-card missing" data-subject="${subject}" onclick="promptUpload('${subject}')">
-                        <span class="book-icon">${subjectInfo.icon}</span>
-                        <span class="book-title">${subjectInfo.bn}<br><small>${subjectInfo.en}</small></span>
-                        <span class="book-chapters">📤 Upload</span>
-                    </div>
-                `;
-            }
-        }).join('');
-    } else {
+        // For university: show uploaded books only, with upload button
+        libraryTextbooks = textbooks || [];
 
         if (textbooks.length === 0) {
             grid.innerHTML = `
-                <div class="library-loading">
-                    <span>📚 No textbooks uploaded yet</span>
-                    <p style="font-size: 0.85rem; margin-top: 8px;">Be the first to upload!</p>
+                <div class="library-empty-university">
+                    <span class="empty-icon">📚</span>
+                    <h3>No books uploaded yet</h3>
+                    <p>Upload your course materials to share with others</p>
+                    <button class="upload-book-btn" onclick="showUploadForm()">
+                        📤 Upload a Book
+                    </button>
                 </div>
             `;
         } else {
-            grid.innerHTML = textbooks.map(book => {
-                const subjectInfo = SUBJECT_NAMES[book.subject] || SUBJECT_NAMES.other;
+            grid.innerHTML = `
+                <div class="university-upload-header">
+                    <button class="upload-book-btn" onclick="showUploadForm()">📤 Upload New Book</button>
+                </div>
+            ` + textbooks.map(book => {
                 return `
                     <div class="book-card available" data-book-id="${book.id}" onclick="openBook('${book.id}')">
-                        <span class="book-icon">${subjectInfo.icon}</span>
-                        <span class="book-title">${book.title || subjectInfo.bn}<br><small>Class ${book.class}</small></span>
+                        <span class="book-icon">📖</span>
+                        <span class="book-title">${book.title || book.subject}<br><small>${book.subject}</small></span>
                         <span class="book-chapters">${book.chaptersCount || 0} chapters</span>
                     </div>
                 `;
             }).join('');
+        }
+    } else {
+        // School student - show predefined subjects
+        const classNum = profile?.class || 10;
+        const stream = profile?.stream || 'science';
+        const expectedSubjects = STANDARD_SUBJECTS[stream] || STANDARD_SUBJECTS.general;
+        textbooks = await getTextbooks({ classNum, stream });
+
+        libraryTextbooks = textbooks || [];
+
+        const availableBooks = new Map();
+        (textbooks || []).forEach(book => {
+            availableBooks.set(book.subject, book);
+        });
+
+        // Render grid for school students
+        if (currentLibraryTab === 'my-books') {
+            grid.innerHTML = expectedSubjects.map(subject => {
+                const book = availableBooks.get(subject);
+                const subjectInfo = SUBJECT_NAMES[subject] || { icon: '📖', bn: subject, en: subject };
+
+                if (book) {
+                    return `
+                        <div class="book-card available" data-book-id="${book.id}" onclick="openBook('${book.id}')">
+                            <span class="book-icon">${subjectInfo.icon}</span>
+                            <span class="book-title">${subjectInfo.bn}<br><small>${subjectInfo.en}</small></span>
+                            <span class="book-chapters">${book.chaptersCount || 0} chapters</span>
+                        </div>
+                    `;
+                } else {
+                    return `
+                        <div class="book-card missing" data-subject="${subject}" onclick="promptUpload('${subject}')">
+                            <span class="book-icon">${subjectInfo.icon}</span>
+                            <span class="book-title">${subjectInfo.bn}<br><small>${subjectInfo.en}</small></span>
+                            <span class="book-chapters">📤 Upload</span>
+                        </div>
+                    `;
+                }
+            }).join('');
+        } else {
+            // All books tab for school
+            if (textbooks.length === 0) {
+                grid.innerHTML = `
+                    <div class="library-loading">
+                        <span>📚 No textbooks uploaded yet</span>
+                        <p style="font-size: 0.85rem; margin-top: 8px;">Be the first to upload!</p>
+                    </div>
+                `;
+            } else {
+                grid.innerHTML = textbooks.map(book => {
+                    const subjectInfo = SUBJECT_NAMES[book.subject] || SUBJECT_NAMES.other;
+                    return `
+                        <div class="book-card available" data-book-id="${book.id}" onclick="openBook('${book.id}')">
+                            <span class="book-icon">${subjectInfo.icon}</span>
+                            <span class="book-title">${book.title || subjectInfo.bn}<br><small>Class ${book.class}</small></span>
+                            <span class="book-chapters">${book.chaptersCount || 0} chapters</span>
+                        </div>
+                    `;
+                }).join('');
+            }
         }
     }
 }
@@ -4020,11 +4467,50 @@ function handleLibraryFileSelect(e) {
 
 
 function showUploadForm() {
+    // First, trigger file selection if no file is pending
+    if (!pendingUploadFile) {
+        const fileInput = document.getElementById('library-file-input');
+        if (fileInput) {
+            fileInput.click();
+        }
+        return;
+    }
+
     const uploadSection = document.querySelector('.library-upload-section');
     const uploadForm = document.getElementById('library-upload-form');
 
     if (uploadSection) uploadSection.classList.add('hidden');
     if (uploadForm) uploadForm.classList.remove('hidden');
+
+    // Customize form based on user type
+    const profile = getStudentProfile();
+    const isUniversity = profile?.type === 'university' ||
+        profile?.educationLevel === 'undergraduate' ||
+        profile?.educationLevel === 'postgraduate' ||
+        profile?.educationLevel === 'doctoral';
+
+    const classGroup = document.getElementById('upload-book-class')?.parentElement;
+    const streamGroup = document.getElementById('upload-book-stream')?.parentElement;
+    const subjectSelect = document.getElementById('upload-book-subject');
+
+    if (isUniversity) {
+        // Hide class and stream for university students
+        if (classGroup) classGroup.style.display = 'none';
+        if (streamGroup) streamGroup.style.display = 'none';
+
+        // Change subject dropdown to text input for university
+        if (subjectSelect) {
+            const subjectGroup = subjectSelect.parentElement;
+            subjectGroup.innerHTML = `
+                <label>Subject/Course Name</label>
+                <input type="text" id="upload-book-subject" placeholder="e.g., Data Structures, Operating Systems">
+            `;
+        }
+    } else {
+        // Show class and stream for school students
+        if (classGroup) classGroup.style.display = 'block';
+        if (streamGroup) streamGroup.style.display = 'block';
+    }
 }
 
 
@@ -4049,22 +4535,67 @@ async function confirmUpload() {
         return;
     }
 
-    const title = document.getElementById('upload-book-title')?.value.trim();
-    const subject = document.getElementById('upload-book-subject')?.value;
-    const classNum = document.getElementById('upload-book-class')?.value;
-    const stream = document.getElementById('upload-book-stream')?.value;
+    const profile = getStudentProfile();
+    const isUniversity = profile?.type === 'university' ||
+        profile?.educationLevel === 'undergraduate' ||
+        profile?.educationLevel === 'postgraduate' ||
+        profile?.educationLevel === 'doctoral';
 
-    if (!title || !subject || !classNum) {
-        addMessageToChat("❌ Please fill in all required fields", "system");
+    const title = document.getElementById('upload-book-title')?.value.trim();
+    const subjectEl = document.getElementById('upload-book-subject');
+    const subject = subjectEl?.value?.trim() || subjectEl?.options?.[subjectEl.selectedIndex]?.value;
+
+    if (!title || !subject) {
+        addMessageToChat("❌ Please fill in title and subject", "system");
         return;
     }
 
+    let uploadData;
 
-    const exists = await checkTextbookExists(classNum, subject);
-    if (exists) {
-        addMessageToChat(`📚 ${title} for Class ${classNum} already exists in the library!`, "system");
-        hideUploadForm();
-        return;
+    if (isUniversity) {
+        // University upload
+        uploadData = {
+            title,
+            subject,
+            type: 'university',
+            department: profile?.department,
+            program: profile?.program,
+            country: profile?.country || 'bangladesh'
+        };
+
+        // Check for duplicate - same subject for same program
+        const exists = await checkUniversityTextbookExists(profile?.department, profile?.program, subject);
+        if (exists) {
+            addMessageToChat(`📚 A book for "${subject}" already exists!`, "system");
+            hideUploadForm();
+            return;
+        }
+    } else {
+        // School upload
+        const classNum = document.getElementById('upload-book-class')?.value;
+        const stream = document.getElementById('upload-book-stream')?.value;
+
+        if (!classNum) {
+            addMessageToChat("❌ Please select a class", "system");
+            return;
+        }
+
+        uploadData = {
+            title,
+            subject,
+            class: classNum,
+            stream,
+            board: profile?.board || 'NCTB',
+            country: profile?.country || 'bangladesh'
+        };
+
+        // Check for duplicate
+        const exists = await checkTextbookExists(classNum, subject);
+        if (exists) {
+            addMessageToChat(`📚 ${title} for Class ${classNum} already exists in the library!`, "system");
+            hideUploadForm();
+            return;
+        }
     }
 
     // Show progress
@@ -4076,18 +4607,9 @@ async function confirmUpload() {
     if (progressFill) progressFill.style.width = '30%';
     if (progressText) progressText.textContent = 'Uploading PDF to cloud...';
 
-
     const fileForExtraction = pendingUploadFile;
 
-
-    const result = await uploadTextbook(pendingUploadFile, {
-        title,
-        subject,
-        class: classNum,
-        stream,
-        board: studentProfile?.board || 'NCTB',
-        country: studentProfile?.country || 'bangladesh'
-    });
+    const result = await uploadTextbook(pendingUploadFile, uploadData);
 
     if (!result.success) {
         addMessageToChat(`❌ Upload failed: ${result.error}`, "system");
@@ -4488,6 +5010,7 @@ async function studyChapter(chapterId) {
 window.openBook = openBook;
 window.promptUpload = promptUpload;
 window.studyChapter = studyChapter;
+window.showUploadForm = showUploadForm;
 
 
 // Handle Send Message
@@ -4523,85 +5046,14 @@ async function handleSendMessage() {
     // Add user message to chat
     addMessageToChat(message, "user");
 
-
-    const quizAnswer = message.trim().toUpperCase();
-    if (quizEngine.currentQuiz && /^[A-D]$/.test(quizAnswer)) {
-
-        const result = quizEngine.submitAnswer(quizAnswer);
-
-        if (result) {
-            // Show feedback
-            if (result.isCorrect) {
-                addMessageToChat(`✅ Correct! ${result.explanation}`, "teacher");
-                if (head) {
-                    TeacherBehavior.setMood('happy');
-                    await speakText(`Correct! ${result.explanation}`);
-                    setTimeout(() => TeacherBehavior.setMood('neutral'), 2000);
-                }
-            } else {
-                addMessageToChat(`❌ Not quite. The correct answer was ${result.correctAnswer}. ${result.explanation}`, "teacher");
-                if (head) {
-                    TeacherBehavior.setMood('sad');
-                    await speakText(`Not quite. The correct answer was ${result.correctAnswer}`);
-                    setTimeout(() => TeacherBehavior.setMood('neutral'), 2000);
-                }
-            }
-
-
-            if (result.hasNext) {
-
-                const question = quizEngine.getCurrentQuestion();
-                if (question) {
-                    const optionsText = question.options.map((opt, i) => `${String.fromCharCode(65 + i)}. ${opt}`).join('\n');
-                    addMessageToChat(`**Question ${question.index + 1}/${question.total}:**\n\n${question.question}\n\n${optionsText}\n\n*Reply with A, B, C, or D*`, "teacher");
-
-                    if (head) {
-                        await speakText(question.question);
-                    }
-                }
-            } else {
-                // Quiz complete - show results
-                const results = quizEngine.getResults();
-
-                addMessageToChat(`📊 **Quiz Complete!**\n\n` +
-                    `Score: ${results.correct}/${results.total} (${results.percentage}%)\n` +
-                    `Grade: ${results.grade}\n` +
-                    `Time: ${results.duration}\n\n` +
-                    `${results.message}`, "teacher");
-
-                if (head) {
-                    if (results.percentage >= 70) {
-                        TeacherBehavior.setMood('happy');
-                    } else {
-                        TeacherBehavior.setMood('neutral');
-                    }
-                    await speakText(results.message);
-                }
-
-
-                if (getCurrentUser()) {
-                    try {
-                        await saveQuizResult(
-                            results.subject,
-                            results.topic,
-                            results.correct,
-                            results.total,
-                            results.duration,
-                            results.answers
-                        );
-                        console.log("💾 Quiz result saved to Firebase");
-                    } catch (error) {
-                        console.error("❌ Error saving quiz result:", error);
-                    }
-                }
-
-
-                quizEngine.resetQuiz();
-            }
-        }
-
-        return; // Don't process as regular message
+    // Check if this is a quiz conversation response (e.g., user answering how many questions)
+    if (handleQuizConversation(message)) {
+        isProcessing = false;
+        return;
     }
+
+    // Note: Quiz is now handled via conversational flow + magic overlay
+    // Text-based quiz answer handling removed
 
 
     conversationHistory.push({ role: "user", content: message });
@@ -5449,9 +5901,15 @@ function showMagicImageOverlay(imageData, mimeType) {
         img.src = `data:${mimeType};base64,${imageData}`;
         overlay.classList.remove('hidden', 'fading-out');
 
-
         document.body.classList.add('magic-image-active');
 
+        // On mobile, close chat panel
+        if (window.innerWidth <= 480) {
+            const chatPanel = document.querySelector('.hologram-panel');
+            if (chatPanel) {
+                chatPanel.classList.add('hidden-by-overlay');
+            }
+        }
 
         requestAnimationFrame(() => {
             overlay.classList.add('visible');
@@ -5468,9 +5926,15 @@ function hideMagicImageOverlay() {
         overlay.classList.add('fading-out');
         overlay.classList.remove('visible');
 
-
         document.body.classList.remove('magic-image-active');
 
+        // On mobile, restore chat panel
+        if (window.innerWidth <= 480) {
+            const chatPanel = document.querySelector('.hologram-panel');
+            if (chatPanel) {
+                chatPanel.classList.remove('hidden-by-overlay');
+            }
+        }
 
         setTimeout(() => {
             overlay.classList.add('hidden');
@@ -5501,65 +5965,26 @@ async function announceDrawing(isBengali) {
 
 
 async function processQuizMode(message) {
-    // Check if user can perform quiz action (credits/limits)
-    const user = getCurrentUser();
-    const canProceed = await canPerformAction('quizAttempt');
-
-    if (!canProceed.allowed) {
-        showUpgradePrompt(canProceed.reason);
-        return;
-    }
-
-
-    if (!canProceed.unlimited) {
-        const userId = user?.uid || null;
-        await deductCredits(userId, 'quizAttempt');
-        updateCreditsDisplay();
-    }
-
-
+    // Extract subject/topic from message
     const curriculumInfo = extractCurriculumInfo(message);
     const subject = curriculumInfo.subject || studentProfile?.subjects?.[0] || 'General';
     const topic = curriculumInfo.topic || 'General Knowledge';
 
-    addMessageToChat(`📝 Generating a quiz on ${subject} - ${topic}...`, "system");
+    // Start conversational quiz flow - ask how many questions
+    quizConversationState = {
+        active: true,
+        waitingFor: 'count',
+        subject: subject,
+        topic: topic,
+        count: 10
+    };
 
-    // Use chat model for quiz generation
-    const quizModel = getModelForTask('chat');
+    const askMessage = `Great! Let's test your knowledge on **${subject}** - ${topic}! 🎯\n\nHow many questions would you like?\n• **5** - Quick quiz\n• **10** - Standard quiz\n• **15** - Extended quiz\n• **20** - Full challenge\n\nJust tell me a number!`;
 
-    try {
-        await quizEngine.generateQuiz(
-            async (prompt) => {
-                const body = {
-                    contents: [{ role: "user", parts: [{ text: prompt }] }],
-                    generationConfig: buildGenerationConfig('chat')
-                };
+    addMessageToChat(askMessage, "teacher");
 
-                const response = await callGeminiAPI(quizModel, body, false);
-
-                const data = await response.json();
-                return data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-            },
-            subject,
-            topic,
-            5,
-            'medium'
-        );
-
-
-        const question = quizEngine.getCurrentQuestion();
-        if (question) {
-            const optionsText = question.options.map((opt, i) => `${String.fromCharCode(65 + i)}. ${opt}`).join('\n');
-            addMessageToChat(`**Question ${question.index + 1}/${question.total}:**\n\n${question.question}\n\n${optionsText}\n\n*Reply with A, B, C, or D*`, "teacher");
-
-            if (head) {
-                await speakText(question.question);
-            }
-        }
-
-    } catch (error) {
-        console.error("Quiz generation error:", error);
-        addMessageToChat("❌ Failed to generate quiz. Please try again.", "system");
+    if (head) {
+        await speakText(`Great! Let's test your knowledge on ${subject}. How many questions would you like? 5, 10, 15, or 20?`);
     }
 }
 
@@ -7660,6 +8085,493 @@ function toggleLiveConversation() {
     }
 }
 
+// ===========================================
+// CONVERSATIONAL QUIZ SYSTEM WITH MAGIC OVERLAY
+// ===========================================
+
+// Quiz conversation state
+let quizConversationState = {
+    active: false,
+    waitingFor: null, // 'count' or null
+    subject: '',
+    topic: '',
+    count: 10
+};
+
+// Quiz overlay state
+let quizOverlayState = {
+    subject: '',
+    topic: '',
+    currentIndex: 0,
+    score: 0,
+    answers: [],
+    questions: [],
+    startTime: null
+};
+
+// Check if user is responding to quiz question count
+function handleQuizConversation(message) {
+    if (!quizConversationState.active) return false;
+
+    if (quizConversationState.waitingFor === 'count') {
+        // Parse number from message
+        const match = message.match(/\d+/);
+        if (match) {
+            const count = parseInt(match[0]);
+            if ([5, 10, 15, 20].includes(count)) {
+                quizConversationState.count = count;
+                quizConversationState.active = false;
+                quizConversationState.waitingFor = null;
+
+                // Start generating quiz
+                generateAndShowQuiz(quizConversationState.subject, quizConversationState.topic, count);
+                return true;
+            } else {
+                addMessageToChat("Please choose 5, 10, 15, or 20 questions! 😊", "teacher");
+                return true;
+            }
+        } else {
+            addMessageToChat("Just tell me a number: 5, 10, 15, or 20! 📝", "teacher");
+            return true;
+        }
+    }
+
+    return false;
+}
+
+// Generate quiz and show in overlay
+async function generateAndShowQuiz(subject, topic, count) {
+    // Check credits
+    const user = getCurrentUser();
+    const canProceed = await canPerformAction('quizAttempt');
+
+    if (!canProceed.allowed) {
+        showUpgradePrompt(canProceed.reason);
+        return;
+    }
+
+    if (!canProceed.unlimited) {
+        const userId = user?.uid || null;
+        await deductCredits(userId, 'quizAttempt');
+        updateCreditsDisplay();
+    }
+
+    addMessageToChat(`📝 Creating ${count} questions for you on **${subject}**... Please wait! ✨`, "teacher");
+
+    if (head) {
+        await speakText(`Creating ${count} questions for you. Please wait!`);
+    }
+
+    const quizModel = getModelForTask('chat');
+
+    try {
+        await quizEngine.generateQuiz(
+            async (prompt) => {
+                const body = {
+                    contents: [{ role: "user", parts: [{ text: prompt }] }],
+                    generationConfig: buildGenerationConfig('chat')
+                };
+                const response = await callGeminiAPI(quizModel, body, false);
+                const data = await response.json();
+                return data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+            },
+            subject,
+            topic,
+            count,
+            'medium'
+        );
+
+        // Initialize overlay state
+        quizOverlayState = {
+            subject: subject,
+            topic: topic,
+            currentIndex: 0,
+            score: 0,
+            answers: new Array(quizEngine.currentQuiz.questions.length).fill(null),
+            questions: quizEngine.currentQuiz.questions,
+            startTime: new Date()
+        };
+
+        // Show the magic quiz overlay
+        showQuizOverlay();
+
+        addMessageToChat(`✅ Quiz ready! I've created ${count} questions for you. Answer them in the quiz panel! 🎯`, "teacher");
+
+        if (head) {
+            TeacherBehavior.setMood('happy');
+            await speakText(`Quiz ready! Here's your first question: ${quizOverlayState.questions[0].question}`);
+            setTimeout(() => TeacherBehavior.setMood('neutral'), 2000);
+        }
+
+    } catch (error) {
+        console.error("Quiz generation error:", error);
+        addMessageToChat("❌ Sorry, I couldn't generate the quiz. Let's try again!", "system");
+    }
+}
+
+// Show quiz overlay (like magic image)
+function showQuizOverlay() {
+    const overlay = document.getElementById('magic-quiz-overlay');
+
+    // Update header
+    document.getElementById('quiz-overlay-subject').textContent = quizOverlayState.subject;
+    document.getElementById('quiz-overlay-topic').textContent = quizOverlayState.topic;
+    document.getElementById('quiz-overlay-total').textContent = quizOverlayState.questions.length;
+
+    // Render first question
+    renderQuizOverlayQuestion(0);
+    renderQuizOverlayDots();
+    updateQuizOverlayStats();
+
+    // Show overlay
+    overlay.classList.remove('hidden');
+    document.body.classList.add('quiz-overlay-active');
+
+    // On mobile, auto-close chat panel
+    if (window.innerWidth <= 480) {
+        const chatPanel = document.querySelector('.hologram-panel');
+        if (chatPanel) {
+            chatPanel.classList.add('hidden-by-overlay');
+        }
+    }
+
+    requestAnimationFrame(() => {
+        overlay.classList.add('visible');
+    });
+
+    console.log("📝 Quiz overlay shown");
+}
+
+// Hide quiz overlay
+function hideQuizOverlay() {
+    const overlay = document.getElementById('magic-quiz-overlay');
+    overlay.classList.remove('visible');
+    document.body.classList.remove('quiz-overlay-active');
+
+    // On mobile, restore chat panel
+    if (window.innerWidth <= 480) {
+        const chatPanel = document.querySelector('.hologram-panel');
+        if (chatPanel) {
+            chatPanel.classList.remove('hidden-by-overlay');
+        }
+    }
+
+    setTimeout(() => {
+        overlay.classList.add('hidden');
+    }, 500);
+
+    quizEngine.resetQuiz();
+}
+
+// Hide results overlay
+function hideResultsOverlay() {
+    const overlay = document.getElementById('quiz-results-overlay');
+    overlay.classList.remove('visible');
+
+    // On mobile, restore chat panel
+    if (window.innerWidth <= 480) {
+        const chatPanel = document.querySelector('.hologram-panel');
+        if (chatPanel) {
+            chatPanel.classList.remove('hidden-by-overlay');
+        }
+    }
+
+    setTimeout(() => {
+        overlay.classList.add('hidden');
+    }, 500);
+}
+
+// Render current question in overlay
+function renderQuizOverlayQuestion(idx) {
+    const q = quizOverlayState.questions[idx];
+    if (!q) return;
+
+    quizOverlayState.currentIndex = idx;
+
+    // Update question number and text
+    document.getElementById('quiz-overlay-q-num').textContent = `Question ${idx + 1}`;
+    document.getElementById('quiz-overlay-q-text').textContent = q.question;
+
+    // Clean option text (remove A) B) etc if present)
+    const cleanOptions = q.options.map(opt => {
+        return opt.replace(/^[A-D]\)\s*/i, '').trim();
+    });
+
+    // Render options
+    const optionsContainer = document.getElementById('quiz-overlay-options');
+    const existingAnswer = quizOverlayState.answers[idx];
+    const correctAnswer = q.correct.toUpperCase();
+
+    optionsContainer.innerHTML = cleanOptions.map((opt, i) => {
+        const letter = String.fromCharCode(65 + i);
+        let classes = 'quiz-option-btn';
+
+        if (existingAnswer) {
+            classes += ' disabled';
+            if (letter === existingAnswer.userAnswer) {
+                classes += existingAnswer.isCorrect ? ' correct' : ' wrong';
+            }
+            if (letter === correctAnswer && !existingAnswer.isCorrect) {
+                classes += ' correct';
+            }
+        }
+
+        return `
+            <button class="${classes}" data-answer="${letter}">
+                <span class="opt-letter">${letter}</span>
+                <span class="opt-text">${opt}</span>
+            </button>
+        `;
+    }).join('');
+
+    // Add click handlers (only if not answered)
+    if (!existingAnswer) {
+        optionsContainer.querySelectorAll('.quiz-option-btn').forEach(btn => {
+            btn.addEventListener('click', handleQuizOverlayOptionClick);
+        });
+    }
+
+    // Update navigation buttons
+    document.getElementById('quiz-overlay-prev').disabled = idx === 0;
+    document.getElementById('quiz-overlay-next').disabled = idx === quizOverlayState.questions.length - 1;
+
+    // Update dots
+    updateQuizOverlayDots();
+}
+
+// Render navigation dots
+function renderQuizOverlayDots() {
+    const container = document.getElementById('quiz-overlay-dots');
+    container.innerHTML = '';
+
+    quizOverlayState.questions.forEach((_, idx) => {
+        const dot = document.createElement('button');
+        dot.className = 'quiz-dot' + (idx === 0 ? ' active' : '');
+        dot.addEventListener('click', () => renderQuizOverlayQuestion(idx));
+        container.appendChild(dot);
+    });
+}
+
+// Update dots state
+function updateQuizOverlayDots() {
+    document.querySelectorAll('.quiz-dot').forEach((dot, i) => {
+        dot.classList.toggle('active', i === quizOverlayState.currentIndex);
+
+        const answer = quizOverlayState.answers[i];
+        if (answer) {
+            dot.classList.add('answered');
+            if (!answer.isCorrect) dot.classList.add('wrong');
+        }
+    });
+}
+
+// Update stats display
+function updateQuizOverlayStats() {
+    document.getElementById('quiz-overlay-current').textContent = quizOverlayState.currentIndex + 1;
+    document.getElementById('quiz-overlay-score').textContent = quizOverlayState.score;
+}
+
+// Handle option click
+async function handleQuizOverlayOptionClick(e) {
+    const btn = e.currentTarget;
+    const answer = btn.dataset.answer;
+    const idx = quizOverlayState.currentIndex;
+    const question = quizOverlayState.questions[idx];
+    const correctAnswer = question.correct.toUpperCase();
+    const isCorrect = answer === correctAnswer;
+
+    // Store answer
+    quizOverlayState.answers[idx] = {
+        userAnswer: answer,
+        correctAnswer: correctAnswer,
+        isCorrect: isCorrect
+    };
+
+    if (isCorrect) {
+        quizOverlayState.score++;
+    }
+
+    // Disable all options
+    document.querySelectorAll('.quiz-option-btn').forEach(b => {
+        b.classList.add('disabled');
+    });
+
+    // Mark correct/wrong
+    btn.classList.add(isCorrect ? 'correct' : 'wrong');
+    if (!isCorrect) {
+        document.querySelector(`[data-answer="${correctAnswer}"]`)?.classList.add('correct');
+    }
+
+    // Update stats
+    updateQuizOverlayStats();
+    updateQuizOverlayDots();
+
+    // Show feedback toast
+    showQuizFeedbackToast(isCorrect, question.explanation);
+
+    // Teacher speaks feedback
+    if (head) {
+        if (isCorrect) {
+            TeacherBehavior.setMood('happy');
+            await speakText("Correct!");
+        } else {
+            TeacherBehavior.setMood('sad');
+            await speakText(`Wrong. The answer is ${correctAnswer}`);
+        }
+        setTimeout(() => TeacherBehavior.setMood('neutral'), 1500);
+    }
+
+    // Check if quiz is complete
+    const allAnswered = quizOverlayState.answers.every(a => a !== null);
+
+    if (allAnswered) {
+        // Show results after a short delay
+        setTimeout(() => {
+            showQuizResults();
+        }, 1500);
+    } else {
+        // Auto advance to next unanswered question
+        setTimeout(() => {
+            const nextUnanswered = quizOverlayState.answers.findIndex(a => a === null);
+            if (nextUnanswered !== -1) {
+                renderQuizOverlayQuestion(nextUnanswered);
+                // Teacher reads next question
+                if (head) {
+                    speakText(quizOverlayState.questions[nextUnanswered].question);
+                }
+            }
+        }, 1200);
+    }
+}
+
+// Show feedback toast
+function showQuizFeedbackToast(isCorrect, explanation) {
+    const existing = document.querySelector('.quiz-feedback-toast');
+    if (existing) existing.remove();
+
+    const toast = document.createElement('div');
+    toast.className = `quiz-feedback-toast ${isCorrect ? 'correct' : 'wrong'}`;
+    toast.textContent = isCorrect ? '✅ Correct!' : '❌ Wrong!';
+
+    document.querySelector('.quiz-overlay-content').appendChild(toast);
+
+    setTimeout(() => toast.remove(), 1500);
+}
+
+// Show quiz results
+async function showQuizResults() {
+    hideQuizOverlay();
+
+    const total = quizOverlayState.questions.length;
+    const correct = quizOverlayState.score;
+    const percentage = Math.round((correct / total) * 100);
+
+    // Calculate grade
+    let grade, message;
+    if (percentage >= 90) {
+        grade = 'A+'; message = '🌟 Excellent! You mastered this topic!';
+    } else if (percentage >= 80) {
+        grade = 'A'; message = '👏 Great job! Strong understanding!';
+    } else if (percentage >= 70) {
+        grade = 'B'; message = '👍 Good work! Keep practicing!';
+    } else if (percentage >= 60) {
+        grade = 'C'; message = '📚 Not bad! More study needed!';
+    } else if (percentage >= 50) {
+        grade = 'D'; message = '💪 Keep trying! Review the topic!';
+    } else {
+        grade = 'F'; message = '🤗 Don\'t worry! Let\'s review together!';
+    }
+
+    // Calculate duration
+    const duration = Math.floor((new Date() - quizOverlayState.startTime) / 1000);
+    const minutes = Math.floor(duration / 60);
+    const seconds = duration % 60;
+    const timeStr = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+
+    // Update results overlay
+    document.getElementById('results-score-percent').textContent = `${percentage}%`;
+    document.getElementById('results-grade-letter').textContent = grade;
+    document.getElementById('results-correct-count').textContent = correct;
+    document.getElementById('results-wrong-count').textContent = total - correct;
+    document.getElementById('results-time-taken').textContent = timeStr;
+    document.getElementById('results-message-text').textContent = message;
+
+    // Show results overlay
+    const resultsOverlay = document.getElementById('quiz-results-overlay');
+    resultsOverlay.classList.remove('hidden');
+    requestAnimationFrame(() => {
+        resultsOverlay.classList.add('visible');
+    });
+
+    // Save to Firebase
+    if (getCurrentUser()) {
+        try {
+            await saveQuizResult(
+                quizOverlayState.subject,
+                quizOverlayState.topic,
+                correct,
+                total,
+                timeStr,
+                quizOverlayState.answers
+            );
+            console.log("💾 Quiz saved");
+        } catch (error) {
+            console.error("❌ Quiz save error:", error);
+        }
+    }
+
+    // Teacher announces result
+    if (head) {
+        if (percentage >= 70) TeacherBehavior.setMood('happy');
+        await speakText(`Quiz complete! You scored ${correct} out of ${total}. ${message}`);
+        setTimeout(() => TeacherBehavior.setMood('neutral'), 3000);
+    }
+
+    // Add to chat
+    addMessageToChat(`📊 **Quiz Complete!**\n\nScore: ${correct}/${total} (${percentage}%)\nGrade: ${grade}\nTime: ${timeStr}\n\n${message}`, "teacher");
+
+    quizEngine.resetQuiz();
+}
+
+// Initialize quiz overlay listeners
+function initQuizOverlayListeners() {
+    // Close button
+    document.getElementById('close-quiz-overlay')?.addEventListener('click', hideQuizOverlay);
+
+    // Navigation buttons
+    document.getElementById('quiz-overlay-prev')?.addEventListener('click', () => {
+        if (quizOverlayState.currentIndex > 0) {
+            renderQuizOverlayQuestion(quizOverlayState.currentIndex - 1);
+        }
+    });
+
+    document.getElementById('quiz-overlay-next')?.addEventListener('click', () => {
+        if (quizOverlayState.currentIndex < quizOverlayState.questions.length - 1) {
+            renderQuizOverlayQuestion(quizOverlayState.currentIndex + 1);
+        }
+    });
+
+    // Results buttons
+    document.getElementById('quiz-close-btn')?.addEventListener('click', hideResultsOverlay);
+    document.getElementById('quiz-review-btn')?.addEventListener('click', () => {
+        // Show review in chat
+        hideResultsOverlay();
+        let reviewMsg = "📋 **Quiz Review:**\n\n";
+        quizOverlayState.questions.forEach((q, i) => {
+            const ans = quizOverlayState.answers[i];
+            const icon = ans?.isCorrect ? '✅' : '❌';
+            reviewMsg += `${icon} **Q${i + 1}:** ${q.question}\n`;
+            reviewMsg += `Your answer: ${ans?.userAnswer || 'N/A'} | Correct: ${q.correct}\n`;
+            if (q.explanation) reviewMsg += `💡 ${q.explanation}\n`;
+            reviewMsg += '\n';
+        });
+        addMessageToChat(reviewMsg, "teacher");
+    });
+}
+
+// Expose globally
+window.handleQuizConversation = handleQuizConversation;
+
 document.addEventListener("DOMContentLoaded", () => {
     // initializeLightRays(); // Disabled - using classroom GLB
     createParticleStars();
@@ -7670,4 +8582,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (liveTalkBtn) {
         liveTalkBtn.addEventListener('click', toggleLiveConversation);
     }
+
+    // Initialize Quiz Overlay listeners
+    initQuizOverlayListeners();
 });
