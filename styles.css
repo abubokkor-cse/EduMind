@@ -433,13 +433,13 @@ body {
 .quiz-overlay-title h3 {
     font-size: 1.1rem;
     font-weight: 600;
-    color: var(--text-primary);
+    color: #1a1a1a;
     margin: 0;
 }
 
 .quiz-overlay-title p {
     font-size: 0.8rem;
-    color: var(--text-secondary);
+    color: #444444;
     margin: 0;
 }
 
@@ -451,25 +451,25 @@ body {
 }
 
 .quiz-overlay-progress {
-    color: var(--text-secondary);
+    color: #333333;
 }
 
 .quiz-overlay-score {
-    color: var(--accent-success);
+    color: #16a34a;
 }
 
 .quiz-overlay-close {
     width: 36px;
     height: 36px;
     border-radius: var(--radius-sm);
-    background: var(--lg-bg-color);
+    background: rgba(0, 0, 0, 0.1);
     backdrop-filter: blur(4px);
     border: none;
-    color: var(--text-secondary);
+    color: #333333;
     cursor: pointer;
     font-size: 1rem;
     transition: all var(--transition-normal);
-    box-shadow: inset 1px 1px 0 var(--lg-highlight), inset 0 0 5px var(--lg-highlight);
+    box-shadow: inset 1px 1px 0 rgba(255, 255, 255, 0.3);
 }
 
 .quiz-overlay-close:hover {
@@ -485,7 +485,7 @@ body {
 .quiz-overlay-question-number {
     font-size: 0.75rem;
     font-weight: 600;
-    color: var(--text-secondary);
+    color: #666666;
     text-transform: uppercase;
     letter-spacing: 1px;
     margin-bottom: 8px;
@@ -494,7 +494,7 @@ body {
 .quiz-overlay-question-text {
     font-size: 1.05rem;
     font-weight: 500;
-    color: var(--text-primary);
+    color: #1a1a1a;
     line-height: 1.5;
 }
 
@@ -510,17 +510,17 @@ body {
     align-items: center;
     gap: 12px;
     padding: 12px 14px;
-    background: var(--lg-bg-color);
-    border: none;
+    background: rgba(255, 255, 255, 0.4);
+    border: 1px solid rgba(0, 0, 0, 0.1);
     border-radius: var(--radius-sm);
-    color: var(--text-primary);
+    color: #1a1a1a;
     font-size: 0.95rem;
     text-align: left;
     cursor: pointer;
     transition: all var(--transition-normal);
     width: 100%;
     backdrop-filter: blur(4px);
-    box-shadow: inset 1px 1px 0 var(--lg-highlight), inset 0 0 5px var(--lg-highlight);
+    box-shadow: inset 1px 1px 0 rgba(255, 255, 255, 0.5);
 }
 
 .quiz-option-btn:hover:not(.disabled) {
@@ -535,12 +535,12 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: var(--lg-bg-color);
+    background: rgba(0, 0, 0, 0.1);
     border-radius: var(--radius-sm);
     font-weight: 600;
     font-size: 0.9rem;
     flex-shrink: 0;
-    box-shadow: inset 1px 1px 0 var(--lg-highlight);
+    color: #1a1a1a;
 }
 
 .quiz-option-btn.selected {
@@ -582,14 +582,14 @@ body {
 
 .quiz-nav-btn {
     padding: 8px 14px;
-    background: var(--lg-bg-color);
-    border: none;
+    background: rgba(255, 255, 255, 0.4);
+    border: 1px solid rgba(0, 0, 0, 0.1);
     border-radius: var(--radius-sm);
-    color: var(--text-primary);
+    color: #1a1a1a;
     font-size: 0.85rem;
     cursor: pointer;
     transition: all var(--transition-normal);
-    box-shadow: inset 1px 1px 0 var(--lg-highlight), inset 0 0 5px var(--lg-highlight);
+    box-shadow: inset 1px 1px 0 rgba(255, 255, 255, 0.5);
 }
 
 .quiz-nav-btn:hover:not(:disabled) {
@@ -690,7 +690,7 @@ body {
 .quiz-results-content h2 {
     font-size: 1.3rem;
     font-weight: 600;
-    color: var(--text-primary);
+    color: #1a1a1a;
     margin-bottom: 16px;
 }
 
@@ -704,14 +704,14 @@ body {
 .results-score-big #results-score-percent {
     font-size: 3rem;
     font-weight: 700;
-    color: var(--text-primary);
+    color: #1a1a1a;
     line-height: 1;
 }
 
 .results-score-big #results-grade-letter {
     font-size: 1.5rem;
     font-weight: 600;
-    color: var(--accent-primary);
+    color: #7c3aed;
 }
 
 .results-details {
@@ -726,12 +726,12 @@ body {
     align-items: center;
     gap: 6px;
     font-size: 0.9rem;
-    color: var(--text-secondary);
+    color: #333333;
 }
 
 .results-message {
     font-size: 1rem;
-    color: var(--text-secondary);
+    color: #444444;
     margin-bottom: 20px;
 }
 
@@ -744,6 +744,28 @@ body {
 .results-actions .btn {
     padding: 10px 20px;
     font-size: 0.9rem;
+    color: #1a1a1a;
+    background: rgba(255, 255, 255, 0.5);
+    border: 1px solid rgba(0, 0, 0, 0.15);
+}
+
+.results-actions .btn.primary {
+    background: rgba(124, 58, 237, 0.2);
+    color: #5b21b6;
+    border: 1px solid rgba(124, 58, 237, 0.3);
+}
+
+.results-actions .btn.primary:hover {
+    background: rgba(124, 58, 237, 0.3);
+}
+
+.results-actions .btn.secondary {
+    background: rgba(255, 255, 255, 0.5);
+    color: #333333;
+}
+
+.results-actions .btn.secondary:hover {
+    background: rgba(255, 255, 255, 0.7);
 }
 
 /* Mobile adjustments for quiz overlay */
