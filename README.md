@@ -3,7 +3,7 @@
 > **Winner Project - National AI Build-a-thon 2026 (MillionX Bangladesh)**  
 > Submission ID: MXB2026-Rajshahi-EduMind-AIVirtualTeacher
 
-![EduMind Banner](https://via.placeholder.com/1200x300/4CAF50/FFFFFF?text=EduMind+-+AI+Virtual+Teacher)
+![EduMind Screenshot](screenshot.png)
 
 ## 🌟 Overview
 
@@ -20,6 +20,10 @@
 - 📖 **Textbook Library** - AI chapter extraction (zero duplicate uploads)
 - 📴 **Offline-First** - Works without internet (Firebase IndexedDB)
 - 💰 **Affordable** - ৳0.33 per 15-min session (30× cheaper than private tutors)
+
+## 🏗️ System Architecture
+
+![EduMind System Architecture](EduMind-System-Architecture.png)
 
 ## 🚀 Live Demo
 

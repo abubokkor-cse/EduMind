@@ -679,12 +679,18 @@ body {
 /* Quiz Results Overlay */
 .results-frame {
     width: 350px;
+    overflow: visible;
+    max-height: none;
 }
 
 .quiz-results-content {
     padding: 24px;
     text-align: center;
     width: 100%;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center;
+    flex: 1 1 auto;
 }
 
 .quiz-results-content h2 {
@@ -737,16 +743,22 @@ body {
 
 .results-actions {
     display: flex;
-    gap: 10px;
+    gap: 12px;
     justify-content: center;
+    margin-top: 10px;
+    width: 100%;
 }
 
 .results-actions .btn {
-    padding: 10px 20px;
-    font-size: 0.9rem;
+    padding: 12px 24px;
+    font-size: 0.95rem;
     color: #1a1a1a;
-    background: rgba(255, 255, 255, 0.5);
+    background: rgba(255, 255, 255, 0.6);
     border: 1px solid rgba(0, 0, 0, 0.15);
+    border-radius: 12px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.2s ease;
 }
 
 .results-actions .btn.primary {
@@ -865,7 +877,8 @@ body {
 
     #quiz-results-overlay .magic-quiz-frame {
         width: 100% !important;
-        max-height: 60vh !important;
+        max-height: none !important;
+        overflow: visible !important;
     }
 }
 
