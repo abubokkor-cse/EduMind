@@ -3,10 +3,10 @@
 
 export const INTENT_TYPES = {
     RESEARCH: 'research',      // Deep research mode (async, 1-2 min)
-    CURRICULUM: 'curriculum',   
-    FILE: 'file',              
+    CURRICULUM: 'curriculum',
+    FILE: 'file',
     QUIZ: 'quiz',              // Quiz mode
-    CHAT: 'chat'               
+    CHAT: 'chat'
 };
 
 
@@ -21,27 +21,27 @@ const CURRICULUM_KEYWORDS = [
     'class', 'chapter', 'textbook', 'nctb', 'ncert', 'cbse', 'board',
     'homework', 'lesson', 'syllabus', 'exam', 'ssc', 'hsc', 'gcse',
     'teach me from book', 'from my textbook', 'curriculum',
-    'শ্রেণী', 'অধ্যায়', 'পাঠ্যবই' 
+    'শ্রেণী', 'অধ্যায়', 'পাঠ্যবই'
 ];
 
 const FILE_KEYWORDS = [
     'my file', 'my homework', 'this question', 'uploaded', 'the document',
     'this image', 'my notes', 'the pdf', 'this picture', 'from this',
     'analyze this', 'read this', 'help with this file',
-    'আমার ফাইল', 'এই ছবি' 
+    'আমার ফাইল', 'এই ছবি'
 ];
 
 const QUIZ_KEYWORDS = [
     'quiz me', 'test me', 'quiz', 'test my knowledge', 'examine me',
     'ask me questions', 'check my understanding', 'assessment',
-    'পরীক্ষা', 'প্রশ্ন করো' // Bangla
+    'পরীক্ষা', 'প্রশ্ন করো', 'কুইজ', 'কুইজ দাও', 'কুইজ দিতে চাই', 'কুইজ খেলি' // Bangla
 ];
 
 
 export function detectIntent(message, context = {}) {
     const msgLower = message.toLowerCase();
 
-    
+
     if (hasKeywords(msgLower, RESEARCH_KEYWORDS)) {
         return {
             type: INTENT_TYPES.RESEARCH,
@@ -65,7 +65,7 @@ export function detectIntent(message, context = {}) {
         };
     }
 
-    
+
     if (hasKeywords(msgLower, QUIZ_KEYWORDS)) {
         return {
             type: INTENT_TYPES.QUIZ,
@@ -77,7 +77,7 @@ export function detectIntent(message, context = {}) {
         };
     }
 
-    
+
     if (hasKeywords(msgLower, CURRICULUM_KEYWORDS) || context.hasActiveTextbook) {
         // Try to extract class/chapter info
         const curriculumInfo = extractCurriculumInfo(message);
@@ -92,7 +92,7 @@ export function detectIntent(message, context = {}) {
         };
     }
 
-    
+
     return {
         type: INTENT_TYPES.CHAT,
         confidence: 1.0,
@@ -120,7 +120,7 @@ export function extractCurriculumInfo(message) {
         topic: null
     };
 
-    
+
     const classPatterns = [
         /class\s*(\d+)/i,
         /grade\s*(\d+)/i,
@@ -136,7 +136,7 @@ export function extractCurriculumInfo(message) {
         }
     }
 
-    
+
     const subjects = [
         'physics', 'chemistry', 'biology', 'mathematics', 'math', 'maths',
         'english', 'bangla', 'bengali', 'history', 'geography', 'ict',

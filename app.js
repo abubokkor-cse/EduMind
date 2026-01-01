@@ -5077,27 +5077,26 @@ async function handleSendMessage() {
 
         let detectedMode = currentMode;
 
-
-        if (currentMode === 'chat') {
+        // Check for quiz intent in chat OR curriculum mode
+        if (currentMode === 'chat' || currentMode === 'curriculum') {
             const intent = detectIntent(message, context);
 
-            // Only switch mode for high-confidence detections
-            if (intent.confidence > 0.8 && intent.type !== 'chat') {
-                detectedMode = intent.type;
+            // Handle quiz intent immediately (before AI responds)
+            if (intent.type === 'quiz' && intent.confidence > 0.7) {
+                await processQuizMode(message);
+                isProcessing = false;
+                updateStatus("online");
+                return;
+            }
 
+            // Only switch mode for high-confidence detections (non-quiz)
+            if (currentMode === 'chat' && intent.confidence > 0.8 && intent.type !== 'chat' && intent.type !== 'quiz') {
+                detectedMode = intent.type;
 
                 const modeConfig = getModeButtons().find(m => m.id === intent.type);
                 if (modeConfig) {
                     addMessageToChat(`${modeConfig.icon} Switching to ${modeConfig.label} mode...`, "system");
                 }
-            }
-
-
-            if (intent.type === 'quiz') {
-                await processQuizMode(message);
-                isProcessing = false;
-                updateStatus("online");
-                return;
             }
         }
 
