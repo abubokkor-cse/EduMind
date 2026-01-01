@@ -6002,17 +6002,17 @@ async function processQuizMode(message) {
         ? studentSubjects.join(', ')
         : programCode || department || 'General';
 
-    // Direct message asking which subject (no AI call needed)
+    // Direct message asking which subject (simple, no subject list)
     const askMessage = isBangla
-        ? `চমৎকার! তুমি কুইজ দিতে চাও! 🎯\n\nতোমার বিষয়: **${subjectList}**\n\nকোন বিষয়ে কুইজ দিতে চাও? বিষয়ের নাম বলো!`
-        : `Great! You want a quiz! 🎯\n\nYour subjects: **${subjectList}**\n\nWhich subject do you want to quiz on? Tell me the subject name!`;
+        ? `চমৎকার! তুমি কুইজ দিতে চাও! 🎯\n\nকোন বিষয়ে কুইজ দিতে চাও? বিষয়ের নাম বলো!`
+        : `Great! You want a quiz! 🎯\n\nWhich subject do you want to quiz on?`;
 
     addMessageToChat(askMessage, "teacher");
 
     if (head) {
         const speakMsg = isBangla
-            ? `চমৎকার! তোমার বিষয় হলো ${subjectList}। কোন বিষয়ে কুইজ দিতে চাও?`
-            : `Great! Your subjects are ${subjectList}. Which one do you want to quiz on?`;
+            ? `চমৎকার! কোন বিষয়ে কুইজ দিতে চাও?`
+            : `Great! Which subject do you want to quiz on?`;
         await speakText(speakMsg);
     }
 }
