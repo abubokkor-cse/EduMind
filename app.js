@@ -6129,25 +6129,31 @@ function detectSubjectFromConversation() {
 async function smartQuizExtraction(message, studentSubjects, recentSubject, isBangla) {
     console.log('📝 smartQuizExtraction called with:', message);
 
-    // USE AI FIRST - Let Gemini understand naturally
+    // TRULY SMART AI - Natural conversation like Gemini chat
     try {
-        const prompt = `Extract the topic/subject for a quiz from the student's message.
+        const prompt = `You are having a natural conversation. Student wants a quiz.
 
 Student said: "${message}"
 
-RULE: Whatever topic the student mentions = subject. Accept ANYTHING:
-- "C++" → "C++"
-- "data structure" → "Data Structure"
-- "python" → "Python"
-- "machine learning" → "Machine Learning"
-- "physics" → "Physics"
-- "cooking" → "Cooking"
-- ANY word/phrase = valid subject
+EXTRACT:
+1. SUBJECT/TOPIC - Whatever they want quiz on:
+   - "python" → "Python"
+   - "c++" → "C++"  
+   - "data structure" → "Data Structure"
+   - "constitutional law" → "Constitutional Law"
+   - Handle typos: "pyhton" → "Python", "progaming" → "Programming"
 
-If they mention a number (5,10,15,20), extract as count.
-If no clear topic, subject = null.
+2. COUNT - If they said number (only 5, 10, 15, 20 valid):
+   - "5 questions" → 5
+   - "ten" → 10
+   - "পাঁচটা" → 5
 
-Return JSON only: {"subject": "EXACT topic they said", "count": number or null}`;
+IMPORTANT: Return null for subject if NO clear topic:
+- "I want quiz" → null (no topic)
+- "give me test" → null (no topic)
+- "madam quiz diben" → null (no topic)
+
+Return ONLY JSON: {"subject": "topic or null", "count": 5/10/15/20 or null}`;
 
         console.log('🤖 Calling Gemini API for quiz extraction...');
 
@@ -6197,39 +6203,70 @@ Return JSON only: {"subject": "EXACT topic they said", "count": number or null}`
 function smartFallbackExtraction(message) {
     console.log('🔍 smartFallbackExtraction input:', message);
 
-    // Remove common filler words but KEEP topic words
+    // First, detect COUNT (numbers)
+    let count = null;
+    // Match exact numbers
+    const numMatch = message.match(/\b(5|10|15|20)\b/);
+    if (numMatch) count = parseInt(numMatch[0]);
+
+    // Check Bangla numerals (order matters - check larger first)
+    if (!count) {
+        if (message.includes('২০') || message.includes('বিশ')) count = 20;
+        else if (message.includes('১৫') || message.includes('পনের')) count = 15;
+        else if (message.includes('১০') || message.includes('দশ')) count = 10;
+        else if (message.includes('৫') || message.includes('পাঁচ') || message.includes('পাচ')) count = 5;
+    }
+
+    // Check English words
+    if (!count) {
+        const msgLower = message.toLowerCase();
+        if (msgLower.includes('twenty')) count = 20;
+        else if (msgLower.includes('fifteen')) count = 15;
+        else if (msgLower.includes('ten')) count = 10;
+        else if (msgLower.includes('five')) count = 5;
+    }
+
+    // AGGRESSIVE cleanup - remove ALL filler words
     let cleanMsg = message
-        // Remove quiz request words
-        .replace(/\b(quiz|test|question|questions|examination|exam)\b/gi, '')
-        // Remove common verbs/phrases
-        .replace(/\b(about|on|from|for|give|want|need|take|keep|like|prefer|choose|select)\b/gi, '')
+        // Remove quiz/test words
+        .replace(/\b(quiz|quize|quizes|test|teste|tests|question|questions|exam|examination)\b/gi, '')
+        // Remove request verbs
+        .replace(/\b(give|want|need|take|make|create|generate|start|begin|do)\b/gi, '')
+        // Remove prepositions and connectors
+        .replace(/\b(about|on|from|for|with|in|at|to|of|by|up|out)\b/gi, '')
         // Remove pronouns and articles
-        .replace(/\b(me|i|my|a|an|the|this|that|some|any)\b/gi, '')
-        // Remove polite words
-        .replace(/\b(please|madam|sir|teacher|mam|miss|mr|mrs)\b/gi, '')
-        // Remove Bangla filler words
-        .replace(/\b(কুইজ|পরীক্ষা|প্রশ্ন|থেকে|দাও|চাই|আমি|একটা|ম্যাডাম|স্যার|দিন|করুন)\b/gi, '')
-        // Clean up extra spaces
+        .replace(/\b(i|me|my|we|us|our|you|your|a|an|the|this|that|some|any|it|its)\b/gi, '')
+        // Remove modal verbs
+        .replace(/\b(will|would|can|could|should|shall|may|might|must)\b/gi, '')
+        // Remove polite/greeting words
+        .replace(/\b(please|pls|plz|madam|mam|sir|teacher|miss|mr|mrs|hello|hi|hey|ok|okay|yes|no|sure|thanks|thank)\b/gi, '')
+        // Remove Bangla fillers
+        .replace(/(কুইজ|পরীক্ষা|প্রশ্ন|থেকে|দাও|চাই|আমি|আমাকে|একটা|ম্যাডাম|স্যার|দিন|করুন|টা|গুলো|নিয়ে|সম্পর্কে|বিষয়ে)/gi, '')
+        // Remove numbers we extracted
+        .replace(/\b(5|10|15|20|five|ten|fifteen|twenty)\b/gi, '')
+        .replace(/[৫১০১৫২০]/g, '')
+        // Clean spaces
         .replace(/\s+/g, ' ')
         .trim();
 
-    console.log('🔍 After removing fillers:', cleanMsg);
+    console.log('🔍 After cleanup:', cleanMsg);
 
-    // If something remains, use it as the subject
-    if (cleanMsg.length > 0) {
-        // Capitalize first letter of each word
-        const subject = cleanMsg
-            .split(' ')
-            .filter(w => w.length > 0)
-            .map(w => w.charAt(0).toUpperCase() + w.slice(1))
-            .join(' ');
-
-        console.log('✅ Fallback extracted subject:', subject);
-        return { subject: subject, count: null };
+    // Too short or just filler words remaining = no subject
+    if (cleanMsg.length < 2 || /^(to|a|an|the|ok|yes|no|sure|and|or|but)$/i.test(cleanMsg)) {
+        console.log('⚠️ No clear subject found, count:', count);
+        return { subject: null, count };
     }
 
-    console.log('⚠️ Fallback could not extract subject');
-    return { subject: null, count: null };
+    // If something meaningful remains, use it as the subject
+    // Capitalize first letter of each word
+    const subject = cleanMsg
+        .split(' ')
+        .filter(w => w.length > 0)
+        .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+        .join(' ');
+
+    console.log('✅ Fallback extracted:', { subject, count });
+    return { subject, count };
 }
 
 // Quick pattern-based extraction (no AI needed)
@@ -8560,7 +8597,36 @@ async function handleQuizConversation(message) {
 
         console.log('🧠 AI Quiz Intent:', aiIntent);
 
-        // AI detected user wants different subject
+        // Check if user mentioned a NEW subject (they want to change)
+        // E.g., "about C++ programming" when we were asking for count
+        const newSubject = aiIntent.subject || aiIntent.newSubject;
+        if (newSubject && newSubject !== quizConversationState.subject) {
+            console.log('🔄 User wants different subject:', newSubject);
+            quizConversationState.subject = newSubject;
+            quizConversationState.topic = newSubject;
+
+            // If they also gave count, start immediately
+            if (aiIntent.count) {
+                quizConversationState.active = false;
+                const confirmMsg = isBangla
+                    ? `চলো! **${newSubject}** থেকে ${aiIntent.count}টা প্রশ্নের কুইজ! 🎯`
+                    : `Let's go! ${aiIntent.count} questions on **${newSubject}**! 🎯`;
+                addMessageToChat(confirmMsg, "teacher");
+                if (head) speakText(isBangla ? `${newSubject} কুইজ শুরু!` : `Starting ${newSubject} quiz!`);
+                setTimeout(() => generateAndShowQuiz(newSubject, newSubject, aiIntent.count), 500);
+                return true;
+            }
+
+            // Ask for count with new subject
+            const askCountMsg = isBangla
+                ? `ঠিক আছে! **${newSubject}** থেকে কুইজ! 🎯 কয়টা প্রশ্ন?`
+                : `Okay! **${newSubject}** quiz! 🎯 How many questions?`;
+            addMessageToChat(askCountMsg, "teacher");
+            if (head) speakText(isBangla ? `কয়টা প্রশ্ন?` : `How many questions?`);
+            return true;
+        }
+
+        // AI detected user wants different subject (explicitly said "different", "not", etc.)
         if (aiIntent.wantsDifferent) {
             if (aiIntent.newSubject) {
                 // AI found the new subject they want
@@ -8599,16 +8665,49 @@ async function handleQuizConversation(message) {
             }
         }
 
-        // AI found a count
-        if (aiIntent.count) {
+        // AI found a count OR simple number detection
+        let detectedCount = aiIntent.count;
+
+        // Smart count detection if AI didn't catch it
+        if (!detectedCount) {
+            // Check for digits
+            const countMatch = message.match(/\b(5|10|15|20)\b/);
+            if (countMatch) {
+                detectedCount = parseInt(countMatch[0]);
+            }
+            // Check Bangla digits
+            if (!detectedCount && /[৫১০১৫২০]/.test(message)) {
+                if (message.includes('৫')) detectedCount = 5;
+                else if (message.includes('২০')) detectedCount = 20;
+                else if (message.includes('১৫')) detectedCount = 15;
+                else if (message.includes('১০')) detectedCount = 10;
+            }
+            // Check word numbers (English + Bangla)
+            if (!detectedCount) {
+                const wordCounts = {
+                    'five': 5, 'ten': 10, 'fifteen': 15, 'twenty': 20,
+                    'পাঁচ': 5, 'দশ': 10, 'পনের': 15, 'বিশ': 20,
+                    'পাচ': 5, 'পাচটা': 5, 'দশটা': 10 // Common variations
+                };
+                const msgLower = message.toLowerCase();
+                for (const [word, num] of Object.entries(wordCounts)) {
+                    if (msgLower.includes(word)) {
+                        detectedCount = num;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (detectedCount) {
             quizConversationState.active = false;
             const subject = quizConversationState.subject;
             const confirmMsg = isBangla
-                ? `চলো! **${subject}** থেকে ${aiIntent.count}টা প্রশ্নের কুইজ শুরু! 🎯`
-                : `Starting ${aiIntent.count} questions quiz on **${subject}**! 🎯`;
+                ? `চলো! **${subject}** থেকে ${detectedCount}টা প্রশ্নের কুইজ শুরু! 🎯`
+                : `Starting ${detectedCount} questions quiz on **${subject}**! 🎯`;
             addMessageToChat(confirmMsg, "teacher");
             if (head) speakText(isBangla ? `কুইজ শুরু!` : `Starting quiz!`);
-            setTimeout(() => generateAndShowQuiz(subject, subject, aiIntent.count), 500);
+            setTimeout(() => generateAndShowQuiz(subject, subject, detectedCount), 500);
             return true;
         }
 
@@ -8641,27 +8740,38 @@ async function handleQuizConversation(message) {
 // PURE AI: Analyze quiz conversation naturally using Gemini
 async function analyzeQuizConversation(message, state, isBangla) {
     const currentSubject = state?.subject || null;
+    const waitingFor = state?.waitingFor || 'subject';
 
     try {
-        const prompt = `Quiz conversation - extract what student wants.
+        const prompt = `QUIZ CONVERSATION - Understand student response.
 
-Current subject: "${currentSubject || 'none'}"
+CONTEXT:
+- Waiting for: ${waitingFor}
+- Current subject: "${currentSubject || 'none'}"
+
 Student said: "${message}"
 
-KEY RULE: Accept ANY topic as subject! Whatever they say = the subject.
-- "C++" → subject: "C++"
-- "data structure" → subject: "Data Structure"
-- "python" → subject: "Python"
-- "cooking" → subject: "Cooking"
-- ANY word = valid subject
+EXTRACT WHAT THEY MEAN:
 
-Also detect:
-- Numbers (5,10,15,20) → count
-- "not", "different", "change" → wantsDifferent: true
-- "yes", "ok", "start" → isConfirmation: true
+1️⃣ SUBJECT (any topic is valid):
+   "c++" → "C++"
+   "python programming" → "Python Programming"
+   "data structure" → "Data Structure"
+   Handle typos: "pyhton" → "Python"
 
-Return JSON only:
-{"subject": "topic or null", "count": number or null, "wantsDifferent": true/false, "newSubject": "new topic or null", "isConfirmation": true/false}`;
+2️⃣ COUNT (only 5, 10, 15, 20):
+   "5" → 5
+   "ten" → 10
+   "পাঁচটা" → 5
+   "২০" → 20
+
+3️⃣ INTENT:
+   "yes/ok/sure/start/হ্যাঁ" → isConfirmation: true
+   "no/different/change/না" → wantsDifferent: true
+   New topic when asked for count → newSubject: "topic"
+
+Return ONLY JSON:
+{"subject": "topic/null", "count": 5/10/15/20/null, "wantsDifferent": bool, "newSubject": "topic/null", "isConfirmation": bool}`;
 
         const response = await fetch('/api/gemini', {
             method: 'POST',
