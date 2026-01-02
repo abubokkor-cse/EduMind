@@ -5047,7 +5047,7 @@ async function handleSendMessage() {
     addMessageToChat(message, "user");
 
     // Check if this is a quiz conversation response (e.g., user answering how many questions)
-    if (handleQuizConversation(message)) {
+    if (await handleQuizConversation(message)) {
         isProcessing = false;
         return;
     }
@@ -5986,33 +5986,55 @@ async function processQuizMode(message) {
         studentSubjects = [programCode];
     }
 
-    // Start conversational quiz flow - first ask which subject
+    // Use AI to extract subject and count from message
+    const extractedInfo = await extractQuizInfoWithAI(message, studentSubjects, isBangla);
+
+    // Start conversational quiz flow
     quizConversationState = {
         active: true,
-        waitingFor: 'subject',
-        subject: null,
-        topic: null,
-        count: 10,
+        waitingFor: extractedInfo.subject ? 'count' : 'subject',
+        subject: extractedInfo.subject,
+        topic: extractedInfo.subject,
+        count: extractedInfo.count || 10,
         isBangla: isBangla,
         availableSubjects: studentSubjects
     };
 
-    // Build subject list for display
-    const subjectList = studentSubjects.length > 0
-        ? studentSubjects.join(', ')
-        : programCode || department || 'General';
+    // If both subject and count are provided, start quiz immediately
+    if (extractedInfo.subject && extractedInfo.count) {
+        quizConversationState.active = false;
+        generateAndShowQuiz(extractedInfo.subject, extractedInfo.subject, extractedInfo.count);
+        return;
+    }
 
-    // Direct message asking which subject (simple, no subject list)
+    // If only subject is provided, ask for count
+    if (extractedInfo.subject) {
+        const askCountMsg = isBangla
+            ? `চমৎকার! **${extractedInfo.subject}** থেকে কুইজ! 🎯\n\nকয়টা প্রশ্ন চাও? (৫, ১০, ১৫ বা ২০)`
+            : `Great! **${extractedInfo.subject}** quiz! 🎯\n\nHow many questions? (5, 10, 15, or 20)`;
+
+        addMessageToChat(askCountMsg, "teacher");
+
+        if (head) {
+            const speakMsg = isBangla
+                ? `${extractedInfo.subject} থেকে কুইজ! কয়টা প্রশ্ন চাও?`
+                : `${extractedInfo.subject} quiz! How many questions?`;
+            await speakText(speakMsg);
+        }
+        return;
+    }
+
+    // If no subject provided, ask which subject
     const askMessage = isBangla
-        ? `চমৎকার! তুমি কুইজ দিতে চাও! 🎯\n\nকোন বিষয়ে কুইজ দিতে চাও? বিষয়ের নাম বলো!`
-        : `Great! You want a quiz! 🎯\n\nWhich subject do you want to quiz on?`;
+        ? `চমৎকার! তুমি কুইজ দিতে চাও! 🎯\n\nকোন বিষয়ে কুইজ দিতে চাও?`
+        : `Great! You want a quiz! 🎯\n\nWhich subject?`;
 
     addMessageToChat(askMessage, "teacher");
 
     if (head) {
         const speakMsg = isBangla
-            ? `চমৎকার! কোন বিষয়ে কুইজ দিতে চাও?`
-            : `Great! Which subject do you want to quiz on?`;
+            ? `কোন বিষয়ে কুইজ দিতে চাও?`
+            : `Which subject do you want to quiz on?`;
         await speakText(speakMsg);
     }
 }
@@ -8139,90 +8161,195 @@ let quizOverlayState = {
 };
 
 // Check if user is responding to quiz conversation (subject or count)
-function handleQuizConversation(message) {
+async function handleQuizConversation(message) {
     if (!quizConversationState.active) return false;
 
     const isBangla = quizConversationState.isBangla || /[\u0980-\u09FF]/.test(message);
 
+    // Use AI to extract subject and count from the conversation
+    const extractedInfo = await extractQuizInfoWithAI(message, quizConversationState.availableSubjects, isBangla);
+
     // Step 1: Waiting for subject selection
     if (quizConversationState.waitingFor === 'subject') {
-        // Extract subject from message using AI or keyword matching
-        const studentSubjects = studentProfile?.subjects || [];
-        const msgLower = message.toLowerCase();
+        if (extractedInfo.subject) {
+            quizConversationState.subject = extractedInfo.subject;
+            quizConversationState.topic = extractedInfo.subject;
 
-        // Check if any student subject is mentioned
-        let selectedSubject = null;
-        for (const subj of studentSubjects) {
-            if (msgLower.includes(subj.toLowerCase())) {
-                selectedSubject = subj;
-                break;
+            // If count also provided, start quiz immediately
+            if (extractedInfo.count) {
+                quizConversationState.count = extractedInfo.count;
+                quizConversationState.active = false;
+                quizConversationState.waitingFor = null;
+                generateAndShowQuiz(quizConversationState.subject, quizConversationState.topic, extractedInfo.count);
+                return true;
             }
+
+            // Otherwise ask for count
+            quizConversationState.waitingFor = 'count';
+            const askCountMsg = isBangla
+                ? `চমৎকার! **${extractedInfo.subject}** থেকে কুইজ! 🎯\n\nকয়টা প্রশ্ন চাও? (৫, ১০, ১৫ বা ২০)`
+                : `Great! **${extractedInfo.subject}** quiz! 🎯\n\nHow many questions? (5, 10, 15, or 20)`;
+
+            addMessageToChat(askCountMsg, "teacher");
+
+            if (head) {
+                const speakMsg = isBangla
+                    ? `${extractedInfo.subject} থেকে কুইজ! কয়টা প্রশ্ন চাও?`
+                    : `${extractedInfo.subject} quiz! How many questions?`;
+                speakText(speakMsg);
+            }
+            return true;
+        } else {
+            // AI couldn't extract subject, ask again conversationally
+            const askAgain = isBangla
+                ? "কোন বিষয়ে কুইজ দিতে চাও? বিষয়ের নাম বলো! 😊"
+                : "Which subject do you want to quiz on? Tell me the subject name! 😊";
+            addMessageToChat(askAgain, "teacher");
+            if (head) speakText(askAgain);
+            return true;
         }
-
-        // If no match, use the message as the subject (AI will handle)
-        if (!selectedSubject) {
-            // Clean up the message to extract subject name
-            selectedSubject = message.trim();
-        }
-
-        quizConversationState.subject = selectedSubject;
-        quizConversationState.topic = selectedSubject;
-        quizConversationState.waitingFor = 'count';
-
-        // Now ask how many questions
-        const askCountMsg = isBangla
-            ? `চমৎকার! **${selectedSubject}** থেকে কুইজ! 🎯\n\nকয়টা প্রশ্ন চাও?\n• **৫** - দ্রুত কুইজ\n• **১০** - স্ট্যান্ডার্ড কুইজ\n• **১৫** - বড় কুইজ\n• **২০** - পূর্ণ চ্যালেঞ্জ`
-            : `Great! **${selectedSubject}** quiz! 🎯\n\nHow many questions?\n• **5** - Quick\n• **10** - Standard\n• **15** - Extended\n• **20** - Full challenge`;
-
-        addMessageToChat(askCountMsg, "teacher");
-
-        if (head) {
-            const speakMsg = isBangla
-                ? `${selectedSubject} থেকে কুইজ! কয়টা প্রশ্ন চাও? ৫, ১০, ১৫ অথবা ২০?`
-                : `${selectedSubject} quiz! How many questions? 5, 10, 15, or 20?`;
-            speakText(speakMsg);
-        }
-
-        return true;
     }
 
     // Step 2: Waiting for question count
     if (quizConversationState.waitingFor === 'count') {
-        // Parse number from message (supports both English and Bangla numerals)
-        const banglaToEnglish = { '৫': '5', '১০': '10', '১৫': '15', '২০': '20', '৫টা': '5', '১০টা': '10', '১৫টা': '15', '২০টা': '20' };
-        let processedMsg = message;
-        for (const [bn, en] of Object.entries(banglaToEnglish)) {
-            processedMsg = processedMsg.replace(bn, en);
-        }
+        if (extractedInfo.count) {
+            quizConversationState.count = extractedInfo.count;
+            quizConversationState.active = false;
+            quizConversationState.waitingFor = null;
 
-        const match = processedMsg.match(/\d+/);
-        if (match) {
-            const count = parseInt(match[0]);
-            if ([5, 10, 15, 20].includes(count)) {
-                quizConversationState.count = count;
-                quizConversationState.active = false;
-                quizConversationState.waitingFor = null;
-
-                // Start generating quiz
-                generateAndShowQuiz(quizConversationState.subject, quizConversationState.topic, count);
-                return true;
-            } else {
-                const errMsg = isBangla
-                    ? "৫, ১০, ১৫ অথবা ২০ থেকে একটা বাছো! 😊"
-                    : "Please choose 5, 10, 15, or 20 questions! 😊";
-                addMessageToChat(errMsg, "teacher");
-                return true;
-            }
+            // Start generating quiz
+            generateAndShowQuiz(quizConversationState.subject, quizConversationState.topic, extractedInfo.count);
+            return true;
         } else {
-            const errMsg = isBangla
-                ? "শুধু সংখ্যা বলো: ৫, ১০, ১৫ অথবা ২০! 📝"
-                : "Just tell me a number: 5, 10, 15, or 20! 📝";
-            addMessageToChat(errMsg, "teacher");
+            // AI couldn't extract count, ask again conversationally
+            const askAgain = isBangla
+                ? "কয়টা প্রশ্ন চাও? ৫, ১০, ১৫ বা ২০ বলো! 😊"
+                : "How many questions? Tell me 5, 10, 15, or 20! 😊";
+            addMessageToChat(askAgain, "teacher");
+            if (head) speakText(askAgain);
             return true;
         }
     }
 
     return false;
+}
+
+// AI-powered extraction of quiz subject and count from natural language
+async function extractQuizInfoWithAI(message, studentSubjects, isBangla) {
+    try {
+        const subjectsContext = studentSubjects.length > 0
+            ? `Student's subjects: ${studentSubjects.join(', ')}`
+            : 'No specific subjects on file';
+
+        const extractionPrompt = `You are analyzing a student's quiz request. Extract the subject and question count.
+
+${subjectsContext}
+
+Student message: "${message}"
+
+Analyze this message and extract:
+1. **Subject**: The subject/topic they want to quiz on (e.g., Law, Physics, Math, History)
+2. **Count**: Number of questions (must be 5, 10, 15, or 20)
+
+Important:
+- If subject is mentioned (in English or Bangla like "আইন" = Law, "পদার্থবিদ্যা" = Physics), extract it
+- If count is mentioned (including Bangla numerals ৫=5, ১০=10, ১৫=15, ২০=20), extract it
+- If not mentioned, return null for that field
+- Return ONLY valid JSON with no extra text
+
+Response format (JSON only):
+{
+  "subject": "subject name or null",
+  "count": number or null
+}`;
+
+        const response = await fetch('/api/gemini', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                message: extractionPrompt,
+                conversationHistory: [],
+                systemContext: 'quiz_extraction'
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error('AI extraction failed');
+        }
+
+        const data = await response.json();
+        const aiResponse = data.response || '{}';
+
+        // Parse JSON from AI response (handle markdown code blocks)
+        const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+            const extracted = JSON.parse(jsonMatch[0]);
+            console.log('🤖 AI extracted quiz info:', extracted);
+
+            // Validate count
+            if (extracted.count && ![5, 10, 15, 20].includes(extracted.count)) {
+                extracted.count = null;
+            }
+
+            return {
+                subject: extracted.subject || null,
+                count: extracted.count || null
+            };
+        }
+
+        return { subject: null, count: null };
+
+    } catch (error) {
+        console.error('❌ AI extraction error:', error);
+        // Fallback to simple parsing
+        return fallbackQuizExtraction(message, studentSubjects);
+    }
+}
+
+// Fallback extraction without AI
+function fallbackQuizExtraction(message, studentSubjects) {
+    const msgLower = message.toLowerCase();
+
+    // Try to find subject
+    let subject = null;
+    for (const subj of studentSubjects) {
+        if (msgLower.includes(subj.toLowerCase())) {
+            subject = subj;
+            break;
+        }
+    }
+
+    // Common Bangla subject keywords
+    const banglaSubjects = {
+        'আইন': 'Law',
+        'পদার্থবিদ্যা': 'Physics',
+        'রসায়ন': 'Chemistry',
+        'গণিত': 'Mathematics',
+        'ইতিহাস': 'History',
+        'জীববিজ্ঞান': 'Biology'
+    };
+
+    for (const [bn, en] of Object.entries(banglaSubjects)) {
+        if (message.includes(bn)) {
+            subject = en;
+            break;
+        }
+    }
+
+    // Try to find count (supports Bangla numerals)
+    let count = null;
+    const banglaToEnglish = { '৫': '5', '১০': '10', '১৫': '15', '২০': '20' };
+    let processedMsg = message;
+    for (const [bn, en] of Object.entries(banglaToEnglish)) {
+        processedMsg = processedMsg.replace(bn, en);
+    }
+
+    const match = processedMsg.match(/\b(5|10|15|20)\b/);
+    if (match) {
+        count = parseInt(match[1]);
+    }
+
+    return { subject, count };
 }
 
 // Generate quiz and show in overlay
