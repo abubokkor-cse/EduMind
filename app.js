@@ -8253,7 +8253,10 @@ Analyze this message and extract:
 
 Important:
 - If subject is mentioned (in English or Bangla like "আইন" = Law, "পদার্থবিদ্যা" = Physics), extract it
-- If count is mentioned (including Bangla numerals ৫=5, ১০=10, ১৫=15, ২০=20), extract it
+- If count is mentioned, extract it. Recognize:
+  * Bangla numerals: ৫=5, ১০=10, ১৫=15, ২০=20
+  * Bangla words: পাঁচ/পাঁচটা=5, দশ/দশটা=10, পনের/পনেরটা=15, বিশ/বিশটা=20
+  * English: 5, 10, 15, 20, five, ten, fifteen, twenty
 - If not mentioned, return null for that field
 - Return ONLY valid JSON with no extra text
 
@@ -8336,17 +8339,34 @@ function fallbackQuizExtraction(message, studentSubjects) {
         }
     }
 
-    // Try to find count (supports Bangla numerals)
+    // Try to find count (supports Bangla numerals and words)
     let count = null;
-    const banglaToEnglish = { '৫': '5', '১০': '10', '১৫': '15', '২০': '20' };
-    let processedMsg = message;
-    for (const [bn, en] of Object.entries(banglaToEnglish)) {
-        processedMsg = processedMsg.replace(bn, en);
+    const banglaNumbers = {
+        // Bangla numerals
+        '৫': 5, '১০': 10, '১৫': 15, '২০': 20,
+        // Bangla number words
+        'পাঁচ': 5, 'পাঁচটা': 5, 'পাঁচটি': 5,
+        'দশ': 10, 'দশটা': 10, 'দশটি': 10,
+        'পনের': 15, 'পনেরটা': 15, 'পনেরটি': 15, 'পনরো': 15,
+        'বিশ': 20, 'বিশটা': 20, 'বিশটি': 20,
+        // English words
+        'five': 5, 'ten': 10, 'fifteen': 15, 'twenty': 20
+    };
+
+    // Check for Bangla number words/numerals
+    for (const [bn, num] of Object.entries(banglaNumbers)) {
+        if (message.includes(bn) || msgLower.includes(bn)) {
+            count = num;
+            break;
+        }
     }
 
-    const match = processedMsg.match(/\b(5|10|15|20)\b/);
-    if (match) {
-        count = parseInt(match[1]);
+    // If not found, check for English digits
+    if (!count) {
+        const match = message.match(/\b(5|10|15|20)\b/);
+        if (match) {
+            count = parseInt(match[1]);
+        }
     }
 
     return { subject, count };
