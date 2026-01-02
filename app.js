@@ -7696,7 +7696,10 @@ function toggleVoiceInput() {
 function startVoiceInput() {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     recognition = new SpeechRecognition();
-    recognition.continuous = true;  // Keep listening continuously
+
+    // Detect mobile - don't use continuous mode on mobile (causes duplicates)
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    recognition.continuous = !isMobile;  // Continuous on desktop, single on mobile
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
 
@@ -7704,7 +7707,7 @@ function startVoiceInput() {
     recognition.lang = selectedLanguage;
 
     const langName = selectedLanguage === "en-US" ? "English" : "Bengali";
-    console.log(`🎙️ Voice input started in ${langName}...`);
+    console.log(`🎙️ Voice input started in ${langName} (mobile: ${isMobile})...`);
 
     recognition.onstart = () => {
         isRecording = true;
@@ -7716,6 +7719,7 @@ function startVoiceInput() {
     let finalTranscript = "";
     let silenceTimer = null;
     let isSendingVoice = false; // Prevent double sending on mobile
+    let lastProcessedIndex = -1; // Track processed results to avoid duplicates
 
     recognition.onresult = (event) => {
         // Ignore input while teacher is speaking or already sending
@@ -7725,11 +7729,17 @@ function startVoiceInput() {
 
         let interimTranscript = "";
 
-        // Only process new results (not the same ones again)
+        // Only process NEW results (skip already processed ones)
         for (let i = event.resultIndex; i < event.results.length; i++) {
+            // Skip if we've already processed this result index
+            if (i <= lastProcessedIndex && event.results[i].isFinal) {
+                continue;
+            }
+
             const transcript = event.results[i][0].transcript;
             if (event.results[i].isFinal) {
                 finalTranscript += transcript + " ";
+                lastProcessedIndex = i; // Mark as processed
             } else {
                 interimTranscript = transcript;
             }
@@ -7740,20 +7750,22 @@ function startVoiceInput() {
         // Show current transcript in input
         elements.userInput.value = currentText;
 
-        // Auto-send after 2 seconds of silence
+        // Auto-send after 1.5 seconds of silence (faster on mobile)
         clearTimeout(silenceTimer);
         if (finalTranscript.trim().length > 0) {
+            const delay = isMobile ? 1500 : 2000; // Faster on mobile
             silenceTimer = setTimeout(async () => {
                 if (finalTranscript.trim().length > 0 && !isSpeaking && !isSendingVoice) {
                     isSendingVoice = true; // Lock to prevent double send
                     const textToSend = finalTranscript.trim();
                     finalTranscript = ""; // Clear immediately
+                    lastProcessedIndex = -1; // Reset for next session
                     console.log("✅ Auto-sending:", textToSend);
                     elements.userInput.value = textToSend;
                     await handleSendMessage();
                     isSendingVoice = false; // Unlock after send
                 }
-            }, 2000);
+            }, delay);
         }
     };
 
