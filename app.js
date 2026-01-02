@@ -6133,26 +6133,23 @@ async function smartQuizExtraction(message, studentSubjects, recentSubject, isBa
         if (studentSubjects.length > 0) contextInfo.push(`Student's enrolled subjects: ${studentSubjects.join(', ')}`);
         if (recentSubject) contextInfo.push(`Recently discussed: ${recentSubject}`);
 
-        const prompt = `You are analyzing a student's quiz request. Extract information naturally.
-
-${contextInfo.length > 0 ? 'Context: ' + contextInfo.join('. ') : ''}
+        const prompt = `Extract the topic/subject for a quiz from the student's message.
 
 Student said: "${message}"
 
-IMPORTANT: 
-- Extract the SUBJECT the student ACTUALLY wants (they might want Science even if enrolled in Law)
-- The student's enrolled subject is just context, NOT a constraint
-- Extract question count if mentioned (5, 10, 15, 20)
-- Understand both English and Bangla naturally
+RULE: Whatever topic the student mentions = subject. Accept ANYTHING:
+- "C++" → "C++"
+- "data structure" → "Data Structure"
+- "python" → "Python"
+- "machine learning" → "Machine Learning"
+- "physics" → "Physics"
+- "cooking" → "Cooking"
+- ANY word/phrase = valid subject
 
-Examples:
-- "quiz about science" → subject: "Science"
-- "I want physics quiz 10 questions" → subject: "Physics", count: 10
-- "পদার্থবিদ্যা থেকে ৫টা প্রশ্ন" → subject: "Physics", count: 5
-- "give me a quiz" (no subject mentioned) → subject: null
+If they mention a number (5,10,15,20), extract as count.
+If no clear topic, subject = null.
 
-Return ONLY valid JSON:
-{"subject": "SubjectName or null", "count": 5/10/15/20 or null}`;
+Return JSON only: {"subject": "EXACT topic they said", "count": number or null}`;
 
         const response = await fetch('/api/gemini', {
             method: 'POST',
@@ -8585,34 +8582,25 @@ async function analyzeQuizConversation(message, state, isBangla) {
     const currentSubject = state?.subject || null;
 
     try {
-        const prompt = `You are analyzing a student's response in a quiz conversation.
-        
-Current state:
-- Waiting for: ${currentSubject ? 'question count' : 'subject selection'}
-- Current subject: "${currentSubject || 'none selected yet'}"
+        const prompt = `Quiz conversation - extract what student wants.
 
+Current subject: "${currentSubject || 'none'}"
 Student said: "${message}"
 
-Understand NATURALLY what the student wants. They might:
-- Say a subject name (Science, Physics, Math, Law, Chemistry, Biology, etc.)
-- Say they want something DIFFERENT from current subject
-- Mention a number of questions (5, 10, 15, 20)
-- Confirm with yes/okay/start
+KEY RULE: Accept ANY topic as subject! Whatever they say = the subject.
+- "C++" → subject: "C++"
+- "data structure" → subject: "Data Structure"
+- "python" → subject: "Python"
+- "cooking" → subject: "Cooking"
+- ANY word = valid subject
 
-IMPORTANT: 
-- "quiz about science" → they want Science, even if studying Law
-- "not law", "no", "different" → they want to change subject
-- Bangla words: পদার্থবিদ্যা=Physics, বিজ্ঞান=Science, গণিত=Math, রসায়ন=Chemistry, জীববিজ্ঞান=Biology
-- Bangla numbers: পাঁচ/৫=5, দশ/১০=10, পনের/১৫=15, বিশ/২০=20
+Also detect:
+- Numbers (5,10,15,20) → count
+- "not", "different", "change" → wantsDifferent: true
+- "yes", "ok", "start" → isConfirmation: true
 
-Return ONLY valid JSON (no explanation):
-{
-  "subject": "SubjectName or null",
-  "count": 5 or 10 or 15 or 20 or null,
-  "wantsDifferent": true or false,
-  "newSubject": "NewSubjectName or null",
-  "isConfirmation": true or false
-}`;
+Return JSON only:
+{"subject": "topic or null", "count": number or null, "wantsDifferent": true/false, "newSubject": "new topic or null", "isConfirmation": true/false}`;
 
         const response = await fetch('/api/gemini', {
             method: 'POST',
