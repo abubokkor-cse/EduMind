@@ -6046,7 +6046,7 @@ async function processQuizMode(message) {
         return;
     }
 
-    // No subject found - use AI to ask naturally based on context
+    // No subject found - ask naturally (DON'T force student's enrolled subject)
     quizConversationState = {
         active: true,
         waitingFor: 'subject',
@@ -6057,27 +6057,26 @@ async function processQuizMode(message) {
         availableSubjects: studentSubjects
     };
 
-    // Smart ask - for university students with single program, just use it
+    // Smart ask - suggest but don't force
     let askMessage;
-    if (studentSubjects.length === 1) {
-        // Single subject (likely university program like Law) - confirm and ask count
+    if (recentSubject) {
+        // We were discussing something - suggest it
+        askMessage = isBangla
+            ? `আমরা তো ${recentSubject} নিয়ে কথা বলছিলাম! ${recentSubject} থেকে কুইজ দিবে, নাকি অন্য বিষয়?`
+            : `We were discussing ${recentSubject}! Quiz on ${recentSubject}, or a different subject?`;
+        quizConversationState.suggestedSubject = recentSubject;
+    } else if (studentSubjects.length === 1) {
+        // Single enrolled subject - suggest but allow other choices
         const mainSubject = studentSubjects[0];
-        quizConversationState.subject = mainSubject;
-        quizConversationState.waitingFor = 'count';
         askMessage = isBangla
-            ? `**${mainSubject}** থেকে কুইজ দিতে চাও! 🎯 কয়টা প্রশ্ন দেব?`
-            : `**${mainSubject}** quiz! 🎯 How many questions?`;
-    } else if (recentSubject) {
-        askMessage = isBangla
-            ? `আমরা তো ${recentSubject} নিয়ে কথা বলছিলাম! ${recentSubject} থেকে কুইজ দিবে? কয়টা প্রশ্ন চাও?`
-            : `We were discussing ${recentSubject}! Want a quiz on ${recentSubject}? How many questions?`;
-        quizConversationState.subject = recentSubject;
-        quizConversationState.waitingFor = 'count';
+            ? `তুমি তো ${mainSubject} পড়ো! ${mainSubject} থেকে কুইজ, নাকি অন্য কিছু?`
+            : `You study ${mainSubject}! Quiz on ${mainSubject}, or something else?`;
+        quizConversationState.suggestedSubject = mainSubject;
     } else if (studentSubjects.length > 1) {
-        // Multiple subjects - ask which one (but simpler message)
+        // Multiple subjects
         askMessage = isBangla
-            ? `কোন বিষয়ে কুইজ দিবে? 🎯`
-            : `Which subject? 🎯`;
+            ? `কোন বিষয়ে কুইজ দিতে চাও? 🎯`
+            : `Which subject do you want? 🎯`;
     } else {
         askMessage = isBangla
             ? `কোন বিষয়ে কুইজ দিতে চাও? 😊`
@@ -6128,31 +6127,64 @@ function detectSubjectFromConversation() {
 
 // SMART AI extraction with conversation context
 async function smartQuizExtraction(message, studentSubjects, recentSubject, isBangla) {
-    const msgLower = message.toLowerCase().trim();
-
-    // Quick extraction for common patterns
-    const quickResult = quickExtractQuizInfo(message, studentSubjects, recentSubject);
-    if (quickResult.subject && quickResult.count) {
-        return quickResult;
-    }
-
-    // If message is very short and we have recent subject context, use it
-    if (msgLower.length < 20 && recentSubject && !quickResult.subject) {
-        // User might be saying just "quiz" or "কুইজ দাও" while discussing a topic
-        const countMatch = extractQuestionCount(message);
-        if (countMatch) {
-            return { subject: recentSubject, count: countMatch };
-        }
-    }
-
-    // Use AI for complex messages
+    // USE AI FIRST - Let Gemini understand naturally
     try {
-        const aiResult = await aiExtractQuizInfo(message, studentSubjects, recentSubject, isBangla);
-        return aiResult;
+        const contextInfo = [];
+        if (studentSubjects.length > 0) contextInfo.push(`Student's enrolled subjects: ${studentSubjects.join(', ')}`);
+        if (recentSubject) contextInfo.push(`Recently discussed: ${recentSubject}`);
+
+        const prompt = `You are analyzing a student's quiz request. Extract information naturally.
+
+${contextInfo.length > 0 ? 'Context: ' + contextInfo.join('. ') : ''}
+
+Student said: "${message}"
+
+IMPORTANT: 
+- Extract the SUBJECT the student ACTUALLY wants (they might want Science even if enrolled in Law)
+- The student's enrolled subject is just context, NOT a constraint
+- Extract question count if mentioned (5, 10, 15, 20)
+- Understand both English and Bangla naturally
+
+Examples:
+- "quiz about science" → subject: "Science"
+- "I want physics quiz 10 questions" → subject: "Physics", count: 10
+- "পদার্থবিদ্যা থেকে ৫টা প্রশ্ন" → subject: "Physics", count: 5
+- "give me a quiz" (no subject mentioned) → subject: null
+
+Return ONLY valid JSON:
+{"subject": "SubjectName or null", "count": 5/10/15/20 or null}`;
+
+        const response = await fetch('/api/gemini', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                message: prompt,
+                conversationHistory: [],
+                systemContext: 'quiz_extraction'
+            })
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            const jsonMatch = (data.response || '').match(/\{[\s\S]*?\}/);
+            if (jsonMatch) {
+                const result = JSON.parse(jsonMatch[0]);
+                console.log('🤖 AI Quiz Extraction:', result);
+
+                // Validate count
+                if (result.count && ![5, 10, 15, 20].includes(result.count)) {
+                    result.count = null;
+                }
+
+                return result;
+            }
+        }
     } catch (error) {
         console.error('AI extraction error:', error);
-        return quickResult;
     }
+
+    // Only use simple fallback if AI completely fails
+    return { subject: null, count: null };
 }
 
 // Quick pattern-based extraction (no AI needed)
@@ -8422,59 +8454,38 @@ async function handleQuizConversation(message) {
 
     const isBangla = quizConversationState.isBangla || /[\u0980-\u09FF]/.test(message);
 
-    // Smart extraction using quick patterns + AI
-    const extractedInfo = quickExtractQuizInfo(message, quizConversationState.availableSubjects, null);
+    // PURE AI: Let Gemini understand everything naturally
+    const aiResult = await analyzeQuizConversation(message, quizConversationState, isBangla);
+    console.log('🤖 AI Conversation Analysis:', aiResult);
 
     // Step 1: Waiting for subject selection
     if (quizConversationState.waitingFor === 'subject') {
-        const subject = extractedInfo.subject;
-        const count = extractedInfo.count || extractQuestionCount(message);
-
-        if (subject) {
-            quizConversationState.subject = subject;
-            quizConversationState.topic = subject;
+        if (aiResult.subject) {
+            quizConversationState.subject = aiResult.subject;
+            quizConversationState.topic = aiResult.subject;
 
             // If count also provided, start quiz immediately
-            if (count) {
+            if (aiResult.count) {
                 quizConversationState.active = false;
                 const confirmMsg = isBangla
-                    ? `চলো! **${subject}** থেকে ${count}টা প্রশ্নের কুইজ! 🎯`
-                    : `Let's go! ${count} questions on **${subject}**! 🎯`;
+                    ? `চলো! **${aiResult.subject}** থেকে ${aiResult.count}টা প্রশ্নের কুইজ! 🎯`
+                    : `Let's go! ${aiResult.count} questions on **${aiResult.subject}**! 🎯`;
                 addMessageToChat(confirmMsg, "teacher");
-                if (head) speakText(isBangla ? `${subject} কুইজ শুরু!` : `Starting ${subject} quiz!`);
-                setTimeout(() => generateAndShowQuiz(subject, subject, count), 500);
+                if (head) speakText(isBangla ? `${aiResult.subject} কুইজ শুরু!` : `Starting ${aiResult.subject} quiz!`);
+                setTimeout(() => generateAndShowQuiz(aiResult.subject, aiResult.subject, aiResult.count), 500);
                 return true;
             }
 
             // Ask for count naturally
             quizConversationState.waitingFor = 'count';
             const askCountMsg = isBangla
-                ? `বাহ! **${subject}** থেকে কুইজ! 🎯 কয়টা প্রশ্ন দেব?`
-                : `Nice! **${subject}** quiz! 🎯 How many questions?`;
+                ? `বাহ! **${aiResult.subject}** থেকে কুইজ! 🎯 কয়টা প্রশ্ন দেব?`
+                : `Nice! **${aiResult.subject}** quiz! 🎯 How many questions?`;
             addMessageToChat(askCountMsg, "teacher");
             if (head) speakText(isBangla ? `কয়টা প্রশ্ন চাও?` : `How many questions?`);
             return true;
         } else {
-            // Couldn't find subject - if message looks like a subject name, use it
-            const cleanMsg = message.trim();
-            if (cleanMsg.length > 0 && cleanMsg.length < 30 && !/\d/.test(cleanMsg)) {
-                // Treat the message as subject name
-                const capitalizedSubject = cleanMsg.split(' ').map(w =>
-                    w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()
-                ).join(' ');
-
-                quizConversationState.subject = capitalizedSubject;
-                quizConversationState.topic = capitalizedSubject;
-                quizConversationState.waitingFor = 'count';
-
-                const askCountMsg = isBangla
-                    ? `ঠিক আছে! **${capitalizedSubject}** থেকে কুইজ! কয়টা প্রশ্ন?`
-                    : `Got it! **${capitalizedSubject}** quiz! How many questions?`;
-                addMessageToChat(askCountMsg, "teacher");
-                if (head) speakText(isBangla ? `কয়টা প্রশ্ন চাও?` : `How many questions?`);
-                return true;
-            }
-
+            // AI couldn't find a subject - ask again naturally
             const askAgain = isBangla
                 ? "কোন বিষয়ে কুইজ দিবে? বলো! 😊"
                 : "Which subject? Tell me! 😊";
@@ -8486,8 +8497,8 @@ async function handleQuizConversation(message) {
 
     // Step 2: Waiting for question count
     if (quizConversationState.waitingFor === 'count') {
-        // Use AI to understand user intent naturally
-        const aiIntent = await analyzeQuizIntent(message, quizConversationState.subject, isBangla);
+        // Use same AI result for consistency
+        const aiIntent = aiResult;
 
         console.log('🧠 AI Quiz Intent:', aiIntent);
 
@@ -8569,25 +8580,38 @@ async function handleQuizConversation(message) {
     return false;
 }
 
-// AI-powered quiz intent analysis using Gemini
-async function analyzeQuizIntent(message, currentSubject, isBangla) {
+// PURE AI: Analyze quiz conversation naturally using Gemini
+async function analyzeQuizConversation(message, state, isBangla) {
+    const currentSubject = state?.subject || null;
+
     try {
-        const prompt = `Analyze this student's response in a quiz conversation. Current subject is "${currentSubject}".
+        const prompt = `You are analyzing a student's response in a quiz conversation.
+        
+Current state:
+- Waiting for: ${currentSubject ? 'question count' : 'subject selection'}
+- Current subject: "${currentSubject || 'none selected yet'}"
 
 Student said: "${message}"
 
-Determine:
-1. Do they want a DIFFERENT subject? (said no, not this, something else, change, অন্য, না, ভিন্ন, etc.)
-2. If yes, what new subject do they want? (extract subject name)
-3. Did they mention a question count? (5, 10, 15, 20, পাঁচ, দশ, etc.)
-4. Is this a confirmation? (yes, okay, start, হ্যাঁ, চলো, ঠিক আছে, etc.)
+Understand NATURALLY what the student wants. They might:
+- Say a subject name (Science, Physics, Math, Law, Chemistry, Biology, etc.)
+- Say they want something DIFFERENT from current subject
+- Mention a number of questions (5, 10, 15, 20)
+- Confirm with yes/okay/start
 
-Return JSON only:
+IMPORTANT: 
+- "quiz about science" → they want Science, even if studying Law
+- "not law", "no", "different" → they want to change subject
+- Bangla words: পদার্থবিদ্যা=Physics, বিজ্ঞান=Science, গণিত=Math, রসায়ন=Chemistry, জীববিজ্ঞান=Biology
+- Bangla numbers: পাঁচ/৫=5, দশ/১০=10, পনের/১৫=15, বিশ/২০=20
+
+Return ONLY valid JSON (no explanation):
 {
-  "wantsDifferent": true/false,
-  "newSubject": "subject name or null",
-  "count": number (5/10/15/20) or null,
-  "isConfirmation": true/false
+  "subject": "SubjectName or null",
+  "count": 5 or 10 or 15 or 20 or null,
+  "wantsDifferent": true or false,
+  "newSubject": "NewSubjectName or null",
+  "isConfirmation": true or false
 }`;
 
         const response = await fetch('/api/gemini', {
@@ -8596,32 +8620,37 @@ Return JSON only:
             body: JSON.stringify({
                 message: prompt,
                 conversationHistory: [],
-                systemContext: 'quiz_intent'
+                systemContext: 'quiz_conversation'
             })
         });
 
-        if (!response.ok) throw new Error('AI failed');
-
-        const data = await response.json();
-        const jsonMatch = (data.response || '').match(/\{[\s\S]*\}/);
-
-        if (jsonMatch) {
-            const result = JSON.parse(jsonMatch[0]);
-            // Validate count
-            if (result.count && ![5, 10, 15, 20].includes(result.count)) {
-                result.count = null;
+        if (response.ok) {
+            const data = await response.json();
+            const jsonMatch = (data.response || '').match(/\{[\s\S]*?\}/);
+            if (jsonMatch) {
+                const result = JSON.parse(jsonMatch[0]);
+                // Validate count
+                if (result.count && ![5, 10, 15, 20].includes(result.count)) {
+                    result.count = null;
+                }
+                console.log('🤖 AI Quiz Conversation Analysis:', result);
+                return result;
             }
-            return result;
         }
     } catch (e) {
-        console.error('AI intent analysis error:', e);
+        console.error('AI conversation analysis error:', e);
     }
 
-    // Fallback - couldn't analyze
-    return { wantsDifferent: false, newSubject: null, count: null, isConfirmation: false };
+    // Minimal fallback if AI fails
+    return {
+        subject: null,
+        count: null,
+        wantsDifferent: false,
+        newSubject: null,
+        isConfirmation: false
+    };
 }
 
-// AI-powered extraction of quiz subject and count from natural language
 // Generate quiz and show in overlay
 async function generateAndShowQuiz(subject, topic, count) {
     // Check credits
