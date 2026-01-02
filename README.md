@@ -3,9 +3,16 @@
 > **World's First Emotionally Intelligent AI Teaching Companion**  
 > National AI Build-a-thon 2026 | MillionX Bangladesh
 
-<p align="center">
-  <img src="assets/images/EduMind-System-Architecture.png" alt="EduMind" width="800"/>
-</p>
+<table width="100%">
+  <tr>
+    <td width="50%" align="center"><img src="assets/images/sirAbubokkor.png" alt="Sir Abubokkor" width="100%"/></td>
+    <td width="50%" align="center"><img src="assets/images/mam.png" alt="Ma'am Queen" width="100%"/></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Sir Abubokkor</b><br/>Male Teacher</td>
+    <td align="center"><b>Ma'am Queen</b><br/>Female Teacher</td>
+  </tr>
+</table>
 
 ---
 
@@ -19,16 +26,13 @@
 
 ---
 
-## 🎭 Meet Your Teachers
+## 📱 Mobile Friendly
 
-<table>
+<table width="100%">
   <tr>
-    <td width="50%" align="center"><img src="assets/images/sirAbubokkor.png" alt="Sir Abubokkor" width="300"/></td>
-    <td width="50%" align="center"><img src="assets/images/mam.png" alt="Ma'am Queen" width="300"/></td>
-  </tr>
-  <tr>
-    <td align="center"><b>Sir Abubokkor</b><br/>Male Teacher</td>
-    <td align="center"><b>Ma'am Queen</b><br/>Female Teacher</td>
+    <td width="33%" align="center"><img src="assets/images/sir_mobile.jpg" alt="Sir Mobile" width="100%"/></td>
+    <td width="33%" align="center"><img src="assets/images/mam_mobile.jpg" alt="Ma'am Mobile" width="100%"/></td>
+    <td width="33%" align="center"><img src="assets/images/madam_mobile.jpg" alt="Madam Mobile" width="100%"/></td>
   </tr>
 </table>
 
@@ -133,12 +137,12 @@ npm start
 
 ## 👥 Team
 
-**Team EduMind** — Varendra University, Rajshahi
+**Team EduMind** — Varendra University, Rajshahi, CSE
 
-| Member | Role | Contact |
-|--------|------|---------|
-| **MD. Abu Bokkor** | Lead Developer | abubokkor.cse@gmail.com |
-| **Maharun Nasha Queen** | UI/UX Designer | queennasha9021@gmail.com |
+| Member | Role |
+|--------|------|
+| **MD. Abu Bokkor** | Lead Developer |
+| **Maharun Nasha Queen** | UI/UX Designer |
 
 ---
 
