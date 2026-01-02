@@ -1,5 +1,4 @@
-// Firebase Configuration for EduMind
-// ✅ CONFIGURED - Project: edumind-e85cf
+// Firebase Config - Publishable (safe for public repos)
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut, sendPasswordResetEmail, updateProfile } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";

@@ -1,11 +1,6 @@
-// Stripe Configuration for EduMind
-// ✅ CONFIGURED - Test Mode
+// Stripe Config - Publishable key (safe for public repos)
 
-// Stripe Publishable Key (safe for client-side)
 export const STRIPE_PUBLISHABLE_KEY = 'pk_test_51SicWpAbfnWorjnyMtW553chKp85slEzScGIAN8uD7dUHBMjWhVtjV4PVkGihgZiIoWIG14CYaiLgCXtvtsnlxgq00CiygjUNf';
-
-// ⚠️ Secret Key should ONLY be used on server-side
-// For now, we'll use client-side Stripe Checkout which doesn't need the secret key
 
 // ===========================================
 // Subscription Plans Configuration
