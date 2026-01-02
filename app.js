@@ -1281,14 +1281,23 @@ const elements = {
 
 async function init() {
     console.log("🎓 EduMind Initializing...");
+    console.time("⏱️ Total Init Time");
 
-    // Immediately update header UI from cache (before Firebase loads)
+    // ============================================
+    // 🚀 START AVATAR LOADING IMMEDIATELY - TOP PRIORITY
+    // Don't wait for ANYTHING - start downloading avatar NOW
+    // ============================================
+    console.log("🚀 Starting avatar download immediately...");
+    const avatarPromise = initializeAvatar().catch(err => {
+        console.error("Avatar init failed (non-blocking):", err);
+    });
+
+    // Immediately update header UI from cache (runs in parallel with avatar)
     const cachedAuth = getCachedAuthState();
     if (cachedAuth) {
         console.log("⚡ Instant UI from cached auth:", cachedAuth.email);
         updateHeaderAuthUI(cachedAuth);
     }
-
 
     console.log("📋 DOM Elements check:", {
         avatar: !!elements.avatar,
@@ -1297,42 +1306,35 @@ async function init() {
         chatMessages: !!elements.chatMessages
     });
 
-
     loadSettings();
 
-    // Initialize Firebase Auth and wait for auth state
-    const user = await initAuth();
-    console.log("✅ Firebase Auth initialized", user ? `(User: ${user.email})` : "(No user)");
-
-
-    await initPayments();
-    console.log("✅ Payment system initialized");
-
-
-    await initializeDatabase();
-
-    // Load student profile (from Firebase or localStorage)
-
-    await loadStudentProfile();
-
+    // Auth & Data initialization (all run in parallel with avatar)
+    const initPromises = Promise.all([
+        initAuth().then(user => {
+            console.log("✅ Firebase Auth initialized", user ? `(User: ${user.email})` : "(No user)");
+            return user;
+        }),
+        initPayments().then(() => console.log("✅ Payment system initialized")),
+        initializeDatabase().then(() => console.log("✅ Database initialized")),
+        loadStudentProfile().then(() => console.log("✅ Profile loaded"))
+    ]);
 
     setupEventListeners();
     console.log("✅ Event listeners set up");
 
-    // Setup online/offline monitoring
     setupConnectionMonitor();
 
-
-    await initializeAvatar();
-
+    // Wait for both avatar and initialization to complete
+    const [, user] = await Promise.all([avatarPromise, initPromises]);
+    console.log("✅ Avatar and data ready");
 
     if (!isOnboarded) {
         showOnboarding();
     } else {
-        // Show greeting without audio (audio requires user gesture)
         showGreeting();
     }
 
+    console.timeEnd("⏱️ Total Init Time");
     console.log("✅ EduMind Ready!");
 }
 
@@ -2210,23 +2212,39 @@ function collectOnboardingData(educationLevel, department) {
 
 // Initialize TalkingHead Avatar
 
+// Track loading state to prevent double downloads
+let isAvatarLoading = false;
+let isAvatarLoaded = false;
+let isClassroomLoading = false;
+let isClassroomLoaded = false;
+
 async function initializeAvatar() {
+    // Prevent double initialization
+    if (isAvatarLoading) {
+        console.log("⚠️ Avatar already loading, skipping duplicate call");
+        return;
+    }
+    if (isAvatarLoaded) {
+        console.log("⚠️ Avatar already loaded");
+        return;
+    }
+
+    isAvatarLoading = true;
+
     try {
         elements.loading.classList.remove("hidden");
         elements.loadingText.textContent = "Initializing Avatar...";
 
         console.log("🎭 Creating TalkingHead instance...");
-
+        console.time("⏱️ Avatar Load");
 
         head = new TalkingHead(elements.avatar, {
             // TTS Settings
             ttsEndpoint: CONFIG.googleTTSEndpoint,
             ttsApikey: CONFIG.googleTTSKey,
 
-
             lipsyncModules: ["en", "fi"],
             lipsyncLang: "en",
-
 
             avatarMood: "neutral",
             avatarMute: false,
@@ -2237,16 +2255,13 @@ async function initializeAvatar() {
             avatarSpeakingEyeContact: 0.7,    // 70% eye contact while speaking
             avatarSpeakingHeadMove: 0.6,
 
-
             modelPixelRatio: window.devicePixelRatio || 1,
             modelFPS: 30,
             modelMovementFactor: 0.8,         // Natural body movement
 
-
             cameraZoomEnable: true,
             cameraRotateEnable: true,
             cameraPanEnable: true,
-
 
             lightAmbientColor: 0xffc0cb,      // Pink ambient
             lightAmbientIntensity: 0.8,
@@ -2256,7 +2271,6 @@ async function initializeAvatar() {
             lightDirectTheta: 2
         });
 
-
         window.head = head;
 
         // Load saved teacher preference
@@ -2265,10 +2279,8 @@ async function initializeAvatar() {
         CONFIG.currentTeacher = savedTeacher;
         CONFIG.avatarUrl = teacherConfig.url;
 
-
         CONFIG.tts.elevenLabsVoice = teacherConfig.elevenLabsVoice;
         console.log(`🎙️ TTS Voice set to: ${teacherConfig.elevenLabsVoice} (${teacherConfig.name})`);
-
 
         elements.loadingText.textContent = `Loading ${teacherConfig.name} Teacher...`;
         console.log("📦 Loading avatar from:", teacherConfig.url);
@@ -2289,7 +2301,7 @@ async function initializeAvatar() {
             avatarSpeakingHeadMove: 0.6
         }, (event) => {
             if (event.lengthComputable) {
-                const progress = Math.round((event.loaded / event.total) * 100);
+                const progress = Math.min(100, Math.round((event.loaded / event.total) * 100));
                 if (elements.loadingProgress) {
                     elements.loadingProgress.style.width = `${progress}%`;
                 }
@@ -2299,26 +2311,35 @@ async function initializeAvatar() {
             }
         });
 
+        console.timeEnd("⏱️ Avatar Load");
+        isAvatarLoaded = true;
 
+        // ✅ HIDE LOADING SCREEN IMMEDIATELY - User can see avatar now
         elements.loading.classList.add("hidden");
-
 
         TeacherBehavior.configureForTeaching();
 
-        // Load classroom and setup scene like r3f-ai-language-teacher
-        await loadClassroomBackground();
+        // Load classroom in background (non-blocking)
+        console.log("🏫 Loading classroom in background...");
+        loadClassroomBackground().then(() => {
+            console.log("✅ Classroom loaded");
+        }).catch(err => {
+            console.error("❌ Classroom load failed:", err);
+        });
 
-        console.log("✅ Avatar loaded with realistic teacher behavior!");
+        console.log("✅ Avatar visible and ready!");
 
     } catch (error) {
         console.error("❌ Error loading avatar:", error);
         elements.loadingText.textContent = "Avatar loading failed. Chat still works!";
         head = null;
-
+        isAvatarLoaded = false;
 
         setTimeout(() => {
             elements.loading.classList.add("hidden");
         }, 2000);
+    } finally {
+        isAvatarLoading = false;
     }
 }
 
@@ -2326,17 +2347,29 @@ async function initializeAvatar() {
 
 
 async function loadClassroomBackground() {
+    // Prevent double loading
+    if (isClassroomLoading) {
+        console.log("⚠️ Classroom already loading, skipping duplicate call");
+        return;
+    }
+    if (isClassroomLoaded) {
+        console.log("⚠️ Classroom already loaded");
+        return;
+    }
+
     if (!head || !head.scene) {
         console.log("⚠️ No scene available for classroom background");
         return;
     }
 
+    isClassroomLoading = true;
+
     try {
         console.log("🏫 Loading classroom background...");
+        console.time("⏱️ Classroom Load");
 
         // STOP TalkingHead's camera animation by setting cameraClock to null
         head.cameraClock = null;
-
 
         head.scene.background = new THREE.Color(0xfdb777);
 
@@ -2450,6 +2483,9 @@ async function loadClassroomBackground() {
 
         window.classroom = classroom;
 
+        console.timeEnd("⏱️ Classroom Load");
+        isClassroomLoaded = true;
+
         console.log("✅ Classroom loaded like r3f-ai-language-teacher!");
         console.log("📷 Camera:", head.camera?.position ? [head.camera.position.x, head.camera.position.y, head.camera.position.z] : 'N/A');
         console.log("🏫 Classroom:", classroom?.position ? [classroom.position.x, classroom.position.y, classroom.position.z] : 'N/A');
@@ -2457,6 +2493,9 @@ async function loadClassroomBackground() {
 
     } catch (error) {
         console.error("❌ Error loading classroom:", error);
+        isClassroomLoaded = false;
+    } finally {
+        isClassroomLoading = false;
     }
 }
 
