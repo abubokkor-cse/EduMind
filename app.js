@@ -6127,12 +6127,10 @@ function detectSubjectFromConversation() {
 
 // SMART AI extraction with conversation context
 async function smartQuizExtraction(message, studentSubjects, recentSubject, isBangla) {
+    console.log('📝 smartQuizExtraction called with:', message);
+
     // USE AI FIRST - Let Gemini understand naturally
     try {
-        const contextInfo = [];
-        if (studentSubjects.length > 0) contextInfo.push(`Student's enrolled subjects: ${studentSubjects.join(', ')}`);
-        if (recentSubject) contextInfo.push(`Recently discussed: ${recentSubject}`);
-
         const prompt = `Extract the topic/subject for a quiz from the student's message.
 
 Student said: "${message}"
@@ -6151,6 +6149,8 @@ If no clear topic, subject = null.
 
 Return JSON only: {"subject": "EXACT topic they said", "count": number or null}`;
 
+        console.log('🤖 Calling Gemini API for quiz extraction...');
+
         const response = await fetch('/api/gemini', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -6161,12 +6161,16 @@ Return JSON only: {"subject": "EXACT topic they said", "count": number or null}`
             })
         });
 
+        console.log('📡 API Response status:', response.status);
+
         if (response.ok) {
             const data = await response.json();
+            console.log('📦 API Response data:', data);
+
             const jsonMatch = (data.response || '').match(/\{[\s\S]*?\}/);
             if (jsonMatch) {
                 const result = JSON.parse(jsonMatch[0]);
-                console.log('🤖 AI Quiz Extraction:', result);
+                console.log('✅ AI Quiz Extraction result:', result);
 
                 // Validate count
                 if (result.count && ![5, 10, 15, 20].includes(result.count)) {
@@ -6174,13 +6178,57 @@ Return JSON only: {"subject": "EXACT topic they said", "count": number or null}`
                 }
 
                 return result;
+            } else {
+                console.log('⚠️ No JSON found in response:', data.response);
             }
+        } else {
+            console.log('❌ API call failed:', response.status, response.statusText);
         }
     } catch (error) {
-        console.error('AI extraction error:', error);
+        console.error('❌ AI extraction error:', error);
     }
 
-    // Only use simple fallback if AI completely fails
+    // SMART FALLBACK: Extract topic directly from message
+    console.log('🔄 Using smart fallback extraction...');
+    return smartFallbackExtraction(message);
+}
+
+// Smart fallback - extract topic directly from message without AI
+function smartFallbackExtraction(message) {
+    console.log('🔍 smartFallbackExtraction input:', message);
+
+    // Remove common filler words but KEEP topic words
+    let cleanMsg = message
+        // Remove quiz request words
+        .replace(/\b(quiz|test|question|questions|examination|exam)\b/gi, '')
+        // Remove common verbs/phrases
+        .replace(/\b(about|on|from|for|give|want|need|take|keep|like|prefer|choose|select)\b/gi, '')
+        // Remove pronouns and articles
+        .replace(/\b(me|i|my|a|an|the|this|that|some|any)\b/gi, '')
+        // Remove polite words
+        .replace(/\b(please|madam|sir|teacher|mam|miss|mr|mrs)\b/gi, '')
+        // Remove Bangla filler words
+        .replace(/\b(কুইজ|পরীক্ষা|প্রশ্ন|থেকে|দাও|চাই|আমি|একটা|ম্যাডাম|স্যার|দিন|করুন)\b/gi, '')
+        // Clean up extra spaces
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    console.log('🔍 After removing fillers:', cleanMsg);
+
+    // If something remains, use it as the subject
+    if (cleanMsg.length > 0) {
+        // Capitalize first letter of each word
+        const subject = cleanMsg
+            .split(' ')
+            .filter(w => w.length > 0)
+            .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+            .join(' ');
+
+        console.log('✅ Fallback extracted subject:', subject);
+        return { subject: subject, count: null };
+    }
+
+    console.log('⚠️ Fallback could not extract subject');
     return { subject: null, count: null };
 }
 
@@ -8452,32 +8500,45 @@ async function handleQuizConversation(message) {
     const isBangla = quizConversationState.isBangla || /[\u0980-\u09FF]/.test(message);
 
     // PURE AI: Let Gemini understand everything naturally
-    const aiResult = await analyzeQuizConversation(message, quizConversationState, isBangla);
+    let aiResult = await analyzeQuizConversation(message, quizConversationState, isBangla);
     console.log('🤖 AI Conversation Analysis:', aiResult);
+
+    // If AI didn't find subject, use smart fallback
+    if (!aiResult.subject && !aiResult.newSubject) {
+        console.log('🔄 AI returned null, using fallback...');
+        const fallback = smartFallbackExtraction(message);
+        if (fallback.subject) {
+            aiResult.subject = fallback.subject;
+            aiResult.newSubject = fallback.subject;
+            console.log('✅ Fallback found subject:', fallback.subject);
+        }
+    }
 
     // Step 1: Waiting for subject selection
     if (quizConversationState.waitingFor === 'subject') {
-        if (aiResult.subject) {
-            quizConversationState.subject = aiResult.subject;
-            quizConversationState.topic = aiResult.subject;
+        const subject = aiResult.subject || aiResult.newSubject;
+
+        if (subject) {
+            quizConversationState.subject = subject;
+            quizConversationState.topic = subject;
 
             // If count also provided, start quiz immediately
             if (aiResult.count) {
                 quizConversationState.active = false;
                 const confirmMsg = isBangla
-                    ? `চলো! **${aiResult.subject}** থেকে ${aiResult.count}টা প্রশ্নের কুইজ! 🎯`
-                    : `Let's go! ${aiResult.count} questions on **${aiResult.subject}**! 🎯`;
+                    ? `চলো! **${subject}** থেকে ${aiResult.count}টা প্রশ্নের কুইজ! 🎯`
+                    : `Let's go! ${aiResult.count} questions on **${subject}**! 🎯`;
                 addMessageToChat(confirmMsg, "teacher");
-                if (head) speakText(isBangla ? `${aiResult.subject} কুইজ শুরু!` : `Starting ${aiResult.subject} quiz!`);
-                setTimeout(() => generateAndShowQuiz(aiResult.subject, aiResult.subject, aiResult.count), 500);
+                if (head) speakText(isBangla ? `${subject} কুইজ শুরু!` : `Starting ${subject} quiz!`);
+                setTimeout(() => generateAndShowQuiz(subject, subject, aiResult.count), 500);
                 return true;
             }
 
             // Ask for count naturally
             quizConversationState.waitingFor = 'count';
             const askCountMsg = isBangla
-                ? `বাহ! **${aiResult.subject}** থেকে কুইজ! 🎯 কয়টা প্রশ্ন দেব?`
-                : `Nice! **${aiResult.subject}** quiz! 🎯 How many questions?`;
+                ? `বাহ! **${subject}** থেকে কুইজ! 🎯 কয়টা প্রশ্ন দেব?`
+                : `Nice! **${subject}** quiz! 🎯 How many questions?`;
             addMessageToChat(askCountMsg, "teacher");
             if (head) speakText(isBangla ? `কয়টা প্রশ্ন চাও?` : `How many questions?`);
             return true;
@@ -8629,12 +8690,14 @@ Return JSON only:
         console.error('AI conversation analysis error:', e);
     }
 
-    // Minimal fallback if AI fails
+    // SMART FALLBACK: Extract topic directly from message
+    console.log('🔄 Using smart fallback for conversation...');
+    const fallback = smartFallbackExtraction(message);
     return {
-        subject: null,
-        count: null,
+        subject: fallback.subject,
+        count: fallback.count,
         wantsDifferent: false,
-        newSubject: null,
+        newSubject: fallback.subject,
         isConfirmation: false
     };
 }
