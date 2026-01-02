@@ -2216,7 +2216,7 @@ async function initializeAvatar() {
         elements.loadingText.textContent = "Initializing Avatar...";
 
         console.log("🎭 Creating TalkingHead instance...");
-        console.time("⏱️ Total Avatar + Classroom Load Time");
+        console.time("⏱️ Total Load Time");
 
 
         head = new TalkingHead(elements.avatar, {
@@ -2271,19 +2271,9 @@ async function initializeAvatar() {
         console.log(`🎙️ TTS Voice set to: ${teacherConfig.elevenLabsVoice} (${teacherConfig.name})`);
 
 
-        elements.loadingText.textContent = `Loading ${teacherConfig.name} Teacher & Classroom...`;
+        elements.loadingText.textContent = `Loading ${teacherConfig.name} Teacher...`;
         console.log("📦 Loading avatar from:", teacherConfig.url);
 
-        // ============================================
-        // PARALLEL LOADING: Avatar + Classroom GLB
-        // Pre-fetch classroom GLB while avatar loads
-        // ============================================
-
-        // Start preloading classroom GLB in parallel (using fetch for caching)
-        const classroomPreloadPromise = preloadClassroomGLB();
-
-        // Load avatar (main blocking operation)
-        let avatarProgress = 0;
         await head.showAvatar({
             url: teacherConfig.url,
             body: teacherConfig.body,
@@ -2300,39 +2290,27 @@ async function initializeAvatar() {
             avatarSpeakingHeadMove: 0.6
         }, (event) => {
             if (event.lengthComputable) {
-                avatarProgress = Math.round((event.loaded / event.total) * 100);
+                const progress = Math.round((event.loaded / event.total) * 100);
                 if (elements.loadingProgress) {
-                    // Avatar is 60% of total progress
-                    elements.loadingProgress.style.width = `${avatarProgress * 0.6}%`;
+                    elements.loadingProgress.style.width = `${progress}%`;
                 }
                 if (elements.loadingText) {
-                    elements.loadingText.textContent = `Loading Avatar... ${avatarProgress}%`;
+                    elements.loadingText.textContent = `Loading Avatar... ${progress}%`;
                 }
             }
         });
 
-        console.log("✅ Avatar loaded, now setting up classroom...");
-        elements.loadingText.textContent = "Setting up classroom...";
-        if (elements.loadingProgress) {
-            elements.loadingProgress.style.width = "60%";
-        }
+
+        elements.loading.classList.add("hidden");
+
 
         TeacherBehavior.configureForTeaching();
 
-        // Wait for classroom preload to complete (should already be done or nearly done)
-        await classroomPreloadPromise;
-
-        // Load classroom into scene (GLB already cached in browser)
+        // Load classroom and setup scene like r3f-ai-language-teacher
         await loadClassroomBackground();
 
-        if (elements.loadingProgress) {
-            elements.loadingProgress.style.width = "100%";
-        }
-
-        console.timeEnd("⏱️ Total Avatar + Classroom Load Time");
-        elements.loading.classList.add("hidden");
-
-        console.log("✅ Avatar + Classroom loaded with parallel optimization!");
+        console.timeEnd("⏱️ Total Load Time");
+        console.log("✅ Avatar loaded with realistic teacher behavior!");
 
     } catch (error) {
         console.error("❌ Error loading avatar:", error);
@@ -2343,29 +2321,6 @@ async function initializeAvatar() {
         setTimeout(() => {
             elements.loading.classList.add("hidden");
         }, 2000);
-    }
-}
-
-// Preload classroom GLB file to browser cache (runs in parallel with avatar)
-async function preloadClassroomGLB() {
-    try {
-        console.log("🏫 Pre-fetching classroom GLB...");
-        console.time("⏱️ Classroom Preload");
-
-        // Use fetch to preload into browser cache
-        const response = await fetch(CONFIG.classroomUrl, {
-            method: 'GET',
-            cache: 'force-cache'  // Use cache if available
-        });
-
-        if (response.ok) {
-            // Read into memory to ensure full download
-            await response.arrayBuffer();
-            console.timeEnd("⏱️ Classroom Preload");
-            console.log("✅ Classroom GLB preloaded to cache");
-        }
-    } catch (error) {
-        console.warn("⚠️ Classroom preload failed (will load normally):", error);
     }
 }
 
