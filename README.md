@@ -21,6 +21,19 @@
 - 📴 **Offline-First** - Works without internet (Firebase IndexedDB)
 - 💰 **Affordable** - ৳0.33 per 15-min session (30× cheaper than private tutors)
 
+## 📝 Smart AI Quiz System
+
+<table>
+  <tr>
+    <td width="50%"><img src="first_quize.png" alt="Quiz Conversation" /></td>
+    <td width="50%"><img src="second_quize.png" alt="Quiz Questions" /></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Natural AI Conversation</b></td>
+    <td align="center"><b>Professional Quiz Overlay</b></td>
+  </tr>
+</table>
+
 ## 🏗️ System Architecture
 
 ![EduMind System Architecture](EduMind-System-Architecture.png)
