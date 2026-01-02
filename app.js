@@ -8486,44 +8486,139 @@ async function handleQuizConversation(message) {
 
     // Step 2: Waiting for question count
     if (quizConversationState.waitingFor === 'count') {
-        const count = extractedInfo.count || extractQuestionCount(message);
+        // Use AI to understand user intent naturally
+        const aiIntent = await analyzeQuizIntent(message, quizConversationState.subject, isBangla);
 
-        if (count) {
+        console.log('🧠 AI Quiz Intent:', aiIntent);
+
+        // AI detected user wants different subject
+        if (aiIntent.wantsDifferent) {
+            if (aiIntent.newSubject) {
+                // AI found the new subject they want
+                quizConversationState.subject = aiIntent.newSubject;
+                quizConversationState.topic = aiIntent.newSubject;
+
+                if (aiIntent.count) {
+                    // Has both subject and count - start quiz
+                    quizConversationState.active = false;
+                    const confirmMsg = isBangla
+                        ? `চলো! **${aiIntent.newSubject}** থেকে ${aiIntent.count}টা প্রশ্নের কুইজ! 🎯`
+                        : `Let's go! ${aiIntent.count} questions on **${aiIntent.newSubject}**! 🎯`;
+                    addMessageToChat(confirmMsg, "teacher");
+                    if (head) speakText(isBangla ? `${aiIntent.newSubject} কুইজ শুরু!` : `Starting ${aiIntent.newSubject} quiz!`);
+                    setTimeout(() => generateAndShowQuiz(aiIntent.newSubject, aiIntent.newSubject, aiIntent.count), 500);
+                    return true;
+                }
+
+                // Ask for count
+                const askCountMsg = isBangla
+                    ? `ঠিক আছে! **${aiIntent.newSubject}** থেকে কুইজ! 🎯 কয়টা প্রশ্ন দেব?`
+                    : `Okay! **${aiIntent.newSubject}** quiz! 🎯 How many questions?`;
+                addMessageToChat(askCountMsg, "teacher");
+                if (head) speakText(isBangla ? `কয়টা প্রশ্ন?` : `How many questions?`);
+                return true;
+            } else {
+                // Wants different but didn't say which - ask
+                quizConversationState.waitingFor = 'subject';
+                quizConversationState.subject = null;
+                const askSubject = isBangla
+                    ? `ঠিক আছে! কোন বিষয়ে কুইজ দিতে চাও? 😊`
+                    : `Okay! Which subject do you want? 😊`;
+                addMessageToChat(askSubject, "teacher");
+                if (head) speakText(isBangla ? `কোন বিষয়ে?` : `Which subject?`);
+                return true;
+            }
+        }
+
+        // AI found a count
+        if (aiIntent.count) {
             quizConversationState.active = false;
             const subject = quizConversationState.subject;
             const confirmMsg = isBangla
-                ? `চলো! **${subject}** থেকে ${count}টা প্রশ্নের কুইজ শুরু! 🎯`
-                : `Starting ${count} questions quiz on **${subject}**! 🎯`;
+                ? `চলো! **${subject}** থেকে ${aiIntent.count}টা প্রশ্নের কুইজ শুরু! 🎯`
+                : `Starting ${aiIntent.count} questions quiz on **${subject}**! 🎯`;
+            addMessageToChat(confirmMsg, "teacher");
+            if (head) speakText(isBangla ? `কুইজ শুরু!` : `Starting quiz!`);
+            setTimeout(() => generateAndShowQuiz(subject, subject, aiIntent.count), 500);
+            return true;
+        }
+
+        // AI detected confirmation (yes, okay, start, etc.)
+        if (aiIntent.isConfirmation) {
+            const count = 10; // Default
+            quizConversationState.active = false;
+            const subject = quizConversationState.subject;
+            const confirmMsg = isBangla
+                ? `ঠিক আছে! ১০টা প্রশ্নের **${subject}** কুইজ! 🎯`
+                : `Alright! 10 questions **${subject}** quiz! 🎯`;
             addMessageToChat(confirmMsg, "teacher");
             if (head) speakText(isBangla ? `কুইজ শুরু!` : `Starting quiz!`);
             setTimeout(() => generateAndShowQuiz(subject, subject, count), 500);
             return true;
-        } else {
-            // Default to 10 if user says something like "okay", "yes", "হ্যাঁ"
-            const msgLower = message.toLowerCase();
-            if (['ok', 'okay', 'yes', 'হ্যাঁ', 'হা', 'ঠিক', 'চলো', 'start', 'শুরু'].some(w => msgLower.includes(w))) {
-                const count = 10;
-                quizConversationState.active = false;
-                const subject = quizConversationState.subject;
-                const confirmMsg = isBangla
-                    ? `ঠিক আছে! ১০টা প্রশ্নের **${subject}** কুইজ! 🎯`
-                    : `Alright! 10 questions **${subject}** quiz! 🎯`;
-                addMessageToChat(confirmMsg, "teacher");
-                if (head) speakText(isBangla ? `দশটা প্রশ্নের কুইজ শুরু!` : `Starting 10 question quiz!`);
-                setTimeout(() => generateAndShowQuiz(subject, subject, count), 500);
-                return true;
-            }
-
-            const askAgain = isBangla
-                ? "কয়টা প্রশ্ন? ৫, ১০, ১৫ বা ২০? 😊"
-                : "How many? 5, 10, 15, or 20? 😊";
-            addMessageToChat(askAgain, "teacher");
-            if (head) speakText(askAgain.replace('😊', ''));
-            return true;
         }
+
+        // AI couldn't understand - ask again naturally
+        const askAgain = isBangla
+            ? "কয়টা প্রশ্ন দেব? ৫, ১০, ১৫ বা ২০? 😊"
+            : "How many questions? 5, 10, 15, or 20? 😊";
+        addMessageToChat(askAgain, "teacher");
+        if (head) speakText(askAgain.replace('😊', ''));
+        return true;
     }
 
     return false;
+}
+
+// AI-powered quiz intent analysis using Gemini
+async function analyzeQuizIntent(message, currentSubject, isBangla) {
+    try {
+        const prompt = `Analyze this student's response in a quiz conversation. Current subject is "${currentSubject}".
+
+Student said: "${message}"
+
+Determine:
+1. Do they want a DIFFERENT subject? (said no, not this, something else, change, অন্য, না, ভিন্ন, etc.)
+2. If yes, what new subject do they want? (extract subject name)
+3. Did they mention a question count? (5, 10, 15, 20, পাঁচ, দশ, etc.)
+4. Is this a confirmation? (yes, okay, start, হ্যাঁ, চলো, ঠিক আছে, etc.)
+
+Return JSON only:
+{
+  "wantsDifferent": true/false,
+  "newSubject": "subject name or null",
+  "count": number (5/10/15/20) or null,
+  "isConfirmation": true/false
+}`;
+
+        const response = await fetch('/api/gemini', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                message: prompt,
+                conversationHistory: [],
+                systemContext: 'quiz_intent'
+            })
+        });
+
+        if (!response.ok) throw new Error('AI failed');
+
+        const data = await response.json();
+        const jsonMatch = (data.response || '').match(/\{[\s\S]*\}/);
+
+        if (jsonMatch) {
+            const result = JSON.parse(jsonMatch[0]);
+            // Validate count
+            if (result.count && ![5, 10, 15, 20].includes(result.count)) {
+                result.count = null;
+            }
+            return result;
+        }
+    } catch (e) {
+        console.error('AI intent analysis error:', e);
+    }
+
+    // Fallback - couldn't analyze
+    return { wantsDifferent: false, newSubject: null, count: null, isConfirmation: false };
 }
 
 // AI-powered extraction of quiz subject and count from natural language
