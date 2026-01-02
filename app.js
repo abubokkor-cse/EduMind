@@ -3306,12 +3306,13 @@ function setupEventListeners() {
 
                     // Start with basic profile info (not spreading existing to avoid old fields)
                     const existingProfile = getStudentProfile() || {};
+                    const currentUser = getCurrentUser();
                     const updatedProfile = {
-                        id: existingProfile.id,
-                        email: existingProfile.email,
-                        displayName: existingProfile.displayName,
-                        userId: existingProfile.userId,
-                        createdAt: existingProfile.createdAt,
+                        id: existingProfile.id || ('student_' + Date.now()),
+                        email: existingProfile.email || currentUser?.email,
+                        displayName: existingProfile.displayName || currentUser?.displayName,
+                        userId: existingProfile.userId || currentUser?.uid,
+                        createdAt: existingProfile.createdAt || new Date().toISOString(),
                         country: selectedCountry,
                         countryName: countryName,
                         educationLevel: selectedLevel,
@@ -7714,15 +7715,17 @@ function startVoiceInput() {
 
     let finalTranscript = "";
     let silenceTimer = null;
+    let isSendingVoice = false; // Prevent double sending on mobile
 
     recognition.onresult = (event) => {
-        // Ignore input while teacher is speaking
-        if (isSpeaking) {
+        // Ignore input while teacher is speaking or already sending
+        if (isSpeaking || isSendingVoice) {
             return;
         }
 
         let interimTranscript = "";
 
+        // Only process new results (not the same ones again)
         for (let i = event.resultIndex; i < event.results.length; i++) {
             const transcript = event.results[i][0].transcript;
             if (event.results[i].isFinal) {
@@ -7741,11 +7744,14 @@ function startVoiceInput() {
         clearTimeout(silenceTimer);
         if (finalTranscript.trim().length > 0) {
             silenceTimer = setTimeout(async () => {
-                if (finalTranscript.trim().length > 0 && !isSpeaking) {
-                    console.log("✅ Auto-sending:", finalTranscript.trim());
-                    elements.userInput.value = finalTranscript.trim();
+                if (finalTranscript.trim().length > 0 && !isSpeaking && !isSendingVoice) {
+                    isSendingVoice = true; // Lock to prevent double send
+                    const textToSend = finalTranscript.trim();
+                    finalTranscript = ""; // Clear immediately
+                    console.log("✅ Auto-sending:", textToSend);
+                    elements.userInput.value = textToSend;
                     await handleSendMessage();
-                    finalTranscript = "";
+                    isSendingVoice = false; // Unlock after send
                 }
             }, 2000);
         }
