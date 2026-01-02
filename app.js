@@ -5968,21 +5968,39 @@ async function processQuizMode(message) {
     const isBangla = /[\u0980-\u09FF]/.test(message);
 
     // Get student's subjects from profile - check all possible sources
-    let studentSubjects = studentProfile?.subjects || [];
+    let studentSubjects = [];
     const programCode = studentProfile?.programCode || studentProfile?.programName || studentProfile?.program || '';
     const department = studentProfile?.department || '';
+    const educationLevel = studentProfile?.educationLevel || '';
 
     // Debug log
     console.log("📚 Quiz Mode - Student Profile:", {
-        subjects: studentSubjects,
+        subjects: studentProfile?.subjects,
         programCode,
         department,
+        educationLevel,
         fullProfile: studentProfile
     });
 
-    // If subjects array is empty but we have program info, use that
+    // For university students (law, medicine, engineering, etc.) - use program/department as main subject
+    if (educationLevel === 'undergraduate' || educationLevel === 'postgraduate' || educationLevel === 'doctoral') {
+        // University student - use their actual program/department
+        if (programCode) {
+            studentSubjects = [programCode];
+        } else if (department) {
+            studentSubjects = [department];
+        }
+    } else {
+        // School student - use subjects array if available
+        studentSubjects = studentProfile?.subjects || [];
+    }
+
+    // If still empty, try program info
     if (studentSubjects.length === 0 && programCode) {
         studentSubjects = [programCode];
+    }
+    if (studentSubjects.length === 0 && department) {
+        studentSubjects = [department];
     }
 
     // SMART: Check past conversation for subject context
@@ -6039,22 +6057,31 @@ async function processQuizMode(message) {
         availableSubjects: studentSubjects
     };
 
-    // Smart ask based on student's enrolled subjects
+    // Smart ask - for university students with single program, just use it
     let askMessage;
-    if (studentSubjects.length > 0) {
+    if (studentSubjects.length === 1) {
+        // Single subject (likely university program like Law) - confirm and ask count
+        const mainSubject = studentSubjects[0];
+        quizConversationState.subject = mainSubject;
+        quizConversationState.waitingFor = 'count';
         askMessage = isBangla
-            ? `কুইজ দিতে চাও? বাহ! 🎯 তোমার বিষয়গুলো হলো: ${studentSubjects.join(', ')}। কোনটা থেকে কুইজ দিবে?`
-            : `Want a quiz? Great! 🎯 Your subjects are: ${studentSubjects.join(', ')}. Which one?`;
+            ? `**${mainSubject}** থেকে কুইজ দিতে চাও! 🎯 কয়টা প্রশ্ন দেব?`
+            : `**${mainSubject}** quiz! 🎯 How many questions?`;
     } else if (recentSubject) {
         askMessage = isBangla
             ? `আমরা তো ${recentSubject} নিয়ে কথা বলছিলাম! ${recentSubject} থেকে কুইজ দিবে? কয়টা প্রশ্ন চাও?`
             : `We were discussing ${recentSubject}! Want a quiz on ${recentSubject}? How many questions?`;
         quizConversationState.subject = recentSubject;
         quizConversationState.waitingFor = 'count';
+    } else if (studentSubjects.length > 1) {
+        // Multiple subjects - ask which one (but simpler message)
+        askMessage = isBangla
+            ? `কোন বিষয়ে কুইজ দিবে? 🎯`
+            : `Which subject? 🎯`;
     } else {
         askMessage = isBangla
-            ? `কোন বিষয়ে কুইজ দিতে চাও? বলো! 😊`
-            : `Which subject do you want to quiz on? Tell me! 😊`;
+            ? `কোন বিষয়ে কুইজ দিতে চাও? 😊`
+            : `Which subject do you want to quiz on? 😊`;
     }
 
     addMessageToChat(askMessage, "teacher");
