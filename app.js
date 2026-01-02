@@ -2216,7 +2216,6 @@ async function initializeAvatar() {
         elements.loadingText.textContent = "Initializing Avatar...";
 
         console.log("🎭 Creating TalkingHead instance...");
-        console.time("⏱️ Total Load Time");
 
 
         head = new TalkingHead(elements.avatar, {
@@ -2309,7 +2308,6 @@ async function initializeAvatar() {
         // Load classroom and setup scene like r3f-ai-language-teacher
         await loadClassroomBackground();
 
-        console.timeEnd("⏱️ Total Load Time");
         console.log("✅ Avatar loaded with realistic teacher behavior!");
 
     } catch (error) {
